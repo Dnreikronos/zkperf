@@ -1,0 +1,2390 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Dnreikronos/zkperf/blob/main/schemas/benchmark-report-v1.schema.json",
+  "title": "zkperf BenchmarkReport v1",
+  "description": "Immutable canonical result for one benchmark case, engine, and run.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "report_id",
+    "contract",
+    "run",
+    "benchmark",
+    "engine",
+    "environment",
+    "measurements",
+    "artifacts",
+    "warnings",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "report_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "contract": {
+      "$ref": "#/$defs/contract"
+    },
+    "run": {
+      "$ref": "#/$defs/run"
+    },
+    "benchmark": {
+      "$ref": "#/$defs/benchmark"
+    },
+    "engine": {
+      "$ref": "#/$defs/engine"
+    },
+    "environment": {
+      "$ref": "#/$defs/environment"
+    },
+    "measurements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/measurement"
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/warning"
+      }
+    },
+    "status": {
+      "$ref": "#/$defs/reportStatus"
+    },
+    "extensions": {
+      "$ref": "#/$defs/extensions"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "measurements": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "metric": {
+                  "const": "duration"
+                },
+                "availability": {
+                  "const": "available"
+                },
+                "phase": {
+                  "$ref": "#/$defs/proofRelatedPhase"
+                },
+                "samples": {
+                  "contains": {
+                    "type": "object",
+                    "properties": {
+                      "status": {
+                        "const": "success"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "metric",
+                "availability",
+                "phase",
+                "samples"
+              ]
+            }
+          }
+        },
+        "required": [
+          "measurements"
+        ]
+      },
+      "then": {
+        "properties": {
+          "measurements": {
+            "contains": {
+              "type": "object",
+              "properties": {
+                "metric": {
+                  "const": "proof_size"
+                },
+                "availability": {
+                  "const": "available"
+                }
+              },
+              "required": [
+                "metric",
+                "availability"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$"
+    },
+    "sha256": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "value": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "reason": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/slug"
+        },
+        "message": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9]+(?:[.-][a-z0-9_]+)+$"
+      },
+      "additionalProperties": true
+    },
+    "contract": {
+      "type": "object",
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "const": "zkperf-fairness"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        }
+      },
+      "additionalProperties": false
+    },
+    "suite": {
+      "type": "object",
+      "required": [
+        "id",
+        "revision",
+        "manifest_digest"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "manifest_digest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "concurrency": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "mode",
+            "parallel_attempts"
+          ],
+          "properties": {
+            "mode": {
+              "const": "isolated"
+            },
+            "parallel_attempts": {
+              "const": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "mode",
+            "parallel_attempts"
+          ],
+          "properties": {
+            "mode": {
+              "const": "throughput"
+            },
+            "parallel_attempts": {
+              "type": "integer",
+              "minimum": 2
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "runPolicy": {
+      "type": "object",
+      "required": [
+        "ordering_algorithm",
+        "seed",
+        "concurrency",
+        "retry_policy",
+        "invalidation_policy",
+        "outlier_rule",
+        "percentile_method"
+      ],
+      "properties": {
+        "ordering_algorithm": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "concurrency": {
+          "$ref": "#/$defs/concurrency"
+        },
+        "retry_policy": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "invalidation_policy": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "outlier_rule": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "percentile_method": {
+          "enum": [
+            "linear",
+            "lower",
+            "higher",
+            "midpoint",
+            "nearest_rank"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "standardPhase": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "const": "standard"
+        },
+        "name": {
+          "enum": [
+            "build",
+            "setup",
+            "execution",
+            "proving",
+            "compression",
+            "verification",
+            "end_to_end"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "combinedPhase": {
+      "type": "object",
+      "required": [
+        "kind",
+        "components"
+      ],
+      "properties": {
+        "kind": {
+          "const": "combined"
+        },
+        "components": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "build",
+              "setup",
+              "execution",
+              "proving",
+              "compression",
+              "verification"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "phase": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/standardPhase"
+        },
+        {
+          "$ref": "#/$defs/combinedPhase"
+        }
+      ]
+    },
+    "proofRelatedPhase": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "standard"
+            },
+            "name": {
+              "enum": [
+                "proving",
+                "compression",
+                "verification",
+                "end_to_end"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "combined"
+            },
+            "components": {
+              "contains": {
+                "enum": [
+                  "proving",
+                  "compression",
+                  "verification"
+                ]
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "components"
+          ]
+        }
+      ]
+    },
+    "scheduleEntry": {
+      "type": "object",
+      "required": [
+        "position",
+        "engine_id",
+        "phase",
+        "attempt_index",
+        "warmup"
+      ],
+      "properties": {
+        "position": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "engine_id": {
+          "$ref": "#/$defs/slug"
+        },
+        "phase": {
+          "$ref": "#/$defs/phase"
+        },
+        "attempt_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warmup": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "run": {
+      "type": "object",
+      "required": [
+        "id",
+        "harness_revision",
+        "suite",
+        "started_at",
+        "finished_at",
+        "policy",
+        "planned_order"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "harness_revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "suite": {
+          "$ref": "#/$defs/suite"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "policy": {
+          "$ref": "#/$defs/runPolicy"
+        },
+        "planned_order": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/scheduleEntry"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "workload": {
+      "type": "object",
+      "required": [
+        "revision",
+        "specification_digest"
+      ],
+      "properties": {
+        "revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "specification_digest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "canonicalInput": {
+      "type": "object",
+      "required": [
+        "byte_length",
+        "digest",
+        "visibility",
+        "preprocessing_policy"
+      ],
+      "properties": {
+        "byte_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "private",
+            "mixed"
+          ]
+        },
+        "preprocessing_policy": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "commitmentPolicy": {
+      "type": "object",
+      "required": [
+        "input",
+        "output"
+      ],
+      "properties": {
+        "input": {
+          "enum": [
+            "none",
+            "digest",
+            "bytes"
+          ]
+        },
+        "output": {
+          "enum": [
+            "none",
+            "digest",
+            "bytes"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "lifecycle": {
+      "type": "object",
+      "required": [
+        "profile",
+        "preparation_pins",
+        "build_cache_state",
+        "setup_cache_state",
+        "setup_reuse_count"
+      ],
+      "properties": {
+        "profile": {
+          "enum": [
+            "cold",
+            "warm"
+          ]
+        },
+        "preparation_pins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "build_cache_state": {
+          "enum": [
+            "cold",
+            "warm",
+            "incremental"
+          ]
+        },
+        "setup_cache_state": {
+          "enum": [
+            "cold",
+            "warm"
+          ]
+        },
+        "setup_reuse_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "benchmark": {
+      "type": "object",
+      "required": [
+        "case_id",
+        "workload",
+        "implementation_lane",
+        "canonical_input",
+        "expected_output_digest",
+        "statement",
+        "commitment_policy",
+        "security_target_bits",
+        "lifecycle",
+        "parameters"
+      ],
+      "properties": {
+        "case_id": {
+          "$ref": "#/$defs/slug"
+        },
+        "workload": {
+          "$ref": "#/$defs/workload"
+        },
+        "implementation_lane": {
+          "enum": [
+            "portable",
+            "optimized"
+          ]
+        },
+        "canonical_input": {
+          "$ref": "#/$defs/canonicalInput"
+        },
+        "expected_output_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "statement": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "commitment_policy": {
+          "$ref": "#/$defs/commitmentPolicy"
+        },
+        "security_target_bits": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/lifecycle"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "tool": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "version": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "compiler": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "flags"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "version": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "guest": {
+      "type": "object",
+      "required": [
+        "source_revision",
+        "toolchain",
+        "compiler",
+        "artifact_digest",
+        "optimizations"
+      ],
+      "properties": {
+        "source_revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "toolchain": {
+          "$ref": "#/$defs/tool"
+        },
+        "compiler": {
+          "$ref": "#/$defs/compiler"
+        },
+        "artifact_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "optimizations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "proof": {
+      "type": "object",
+      "required": [
+        "raw_format",
+        "final_format",
+        "transformation_pipeline",
+        "verifier",
+        "parameters_version",
+        "parameters_digest"
+      ],
+      "properties": {
+        "raw_format": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "final_format": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "transformation_pipeline": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "verifier": {
+          "$ref": "#/$defs/tool"
+        },
+        "parameters_version": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "parameters_digest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "engine": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "version",
+        "adapter_revision",
+        "proof_system",
+        "backend",
+        "configured_security_bits",
+        "trust_profile",
+        "guest",
+        "proof",
+        "configuration"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "version": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "adapter_revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "proof_system": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "backend": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "configured_security_bits": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "trust_profile": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "guest": {
+          "$ref": "#/$defs/guest"
+        },
+        "proof": {
+          "$ref": "#/$defs/proof"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "cpu": {
+      "type": "object",
+      "required": [
+        "model",
+        "stepping",
+        "physical_cores",
+        "logical_cores"
+      ],
+      "properties": {
+        "model": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "stepping": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "physical_cores": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "logical_cores": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "operatingSystem": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "kernel"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "version": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "kernel": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "host": {
+      "type": "object",
+      "required": [
+        "machine_id",
+        "architecture",
+        "cpu",
+        "ram_bytes",
+        "accelerators",
+        "storage",
+        "operating_system"
+      ],
+      "properties": {
+        "machine_id": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "architecture": {
+          "enum": [
+            "x86_64",
+            "aarch64",
+            "riscv64",
+            "wasm32",
+            "other"
+          ]
+        },
+        "cpu": {
+          "$ref": "#/$defs/cpu"
+        },
+        "ram_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "accelerators": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "storage": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "operating_system": {
+          "$ref": "#/$defs/operatingSystem"
+        },
+        "firmware_or_microcode": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "remoteProfile": {
+      "type": "object",
+      "required": [
+        "endpoint",
+        "client_region",
+        "endpoint_region",
+        "transport",
+        "connection_type",
+        "round_trip_latency_ns",
+        "jitter_ns",
+        "packet_loss_ratio",
+        "available_bandwidth_bytes_per_second",
+        "measurement_method",
+        "measured_at"
+      ],
+      "properties": {
+        "endpoint": {
+          "type": "string",
+          "format": "uri"
+        },
+        "client_region": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "endpoint_region": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "transport": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "connection_type": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "round_trip_latency_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "jitter_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "packet_loss_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "available_bandwidth_bytes_per_second": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "measurement_method": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "measured_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    },
+    "resources": {
+      "type": "object",
+      "required": [
+        "power_profile",
+        "cpu_affinity",
+        "cpu_limit",
+        "memory_limit_bytes",
+        "worker_count",
+        "accelerator_allocation",
+        "environment_variables",
+        "execution_mode",
+        "network_access"
+      ],
+      "properties": {
+        "power_profile": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "cpu_affinity": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "cpu_limit": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "const": "unlimited"
+            }
+          ]
+        },
+        "memory_limit_bytes": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "const": "unlimited"
+            }
+          ]
+        },
+        "worker_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "accelerator_allocation": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "environment_variables": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "execution_mode": {
+          "enum": [
+            "local",
+            "remote"
+          ]
+        },
+        "network_access": {
+          "type": "boolean"
+        },
+        "remote": {
+          "$ref": "#/$defs/remoteProfile"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "execution_mode": {
+                "const": "remote"
+              }
+            },
+            "required": [
+              "execution_mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "remote"
+            ],
+            "properties": {
+              "network_access": {
+                "const": true
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "remote"
+              ]
+            },
+            "properties": {
+              "network_access": {
+                "const": false
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "clock": {
+      "type": "object",
+      "required": [
+        "source",
+        "resolution_ns",
+        "monotonic"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "resolution_ns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "monotonic": {
+          "const": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "required": [
+        "host",
+        "resources",
+        "clock"
+      ],
+      "properties": {
+        "host": {
+          "$ref": "#/$defs/host"
+        },
+        "resources": {
+          "$ref": "#/$defs/resources"
+        },
+        "clock": {
+          "$ref": "#/$defs/clock"
+        }
+      },
+      "additionalProperties": false
+    },
+    "metricIdentity": {
+      "oneOf": [
+        {
+          "properties": {
+            "metric": {
+              "const": "duration"
+            },
+            "unit": {
+              "const": "nanosecond"
+            }
+          },
+          "required": [
+            "metric",
+            "unit"
+          ]
+        },
+        {
+          "properties": {
+            "metric": {
+              "const": "peak_resident_memory"
+            },
+            "unit": {
+              "const": "byte"
+            }
+          },
+          "required": [
+            "metric",
+            "unit"
+          ]
+        },
+        {
+          "properties": {
+            "metric": {
+              "const": "proof_size"
+            },
+            "unit": {
+              "const": "byte"
+            }
+          },
+          "required": [
+            "metric",
+            "unit",
+            "phase"
+          ]
+        },
+        {
+          "properties": {
+            "metric": {
+              "const": "proving_key_size"
+            },
+            "unit": {
+              "const": "byte"
+            }
+          },
+          "required": [
+            "metric",
+            "unit"
+          ]
+        },
+        {
+          "properties": {
+            "metric": {
+              "const": "verification_key_size"
+            },
+            "unit": {
+              "const": "byte"
+            }
+          },
+          "required": [
+            "metric",
+            "unit"
+          ]
+        },
+        {
+          "properties": {
+            "metric": {
+              "const": "constraint_count"
+            },
+            "unit": {
+              "const": "count"
+            }
+          },
+          "required": [
+            "metric",
+            "unit"
+          ]
+        },
+        {
+          "properties": {
+            "metric": {
+              "const": "cycle_count"
+            },
+            "unit": {
+              "const": "count"
+            }
+          },
+          "required": [
+            "metric",
+            "unit"
+          ]
+        }
+      ]
+    },
+    "boundary": {
+      "type": "object",
+      "required": [
+        "interface",
+        "start",
+        "stop"
+      ],
+      "properties": {
+        "interface": {
+          "enum": [
+            "in_process",
+            "subprocess",
+            "remote"
+          ]
+        },
+        "start": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "stop": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "timeoutPolicy": {
+      "type": "object",
+      "required": [
+        "limit_ns",
+        "enforcement",
+        "termination_grace_ns"
+      ],
+      "properties": {
+        "limit_ns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "enforcement": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "termination_grace_ns": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "durationMeasurementPolicy": {
+      "type": "object",
+      "required": [
+        "warmup_count",
+        "measured_trial_count",
+        "timeout"
+      ],
+      "properties": {
+        "warmup_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "measured_trial_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "timeout": {
+          "$ref": "#/$defs/timeoutPolicy"
+        }
+      },
+      "additionalProperties": false
+    },
+    "timing": {
+      "type": "object",
+      "required": [
+        "start_ns",
+        "stop_ns",
+        "duration_ns"
+      ],
+      "properties": {
+        "start_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stop_ns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duration_ns": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "executionCorrectness": {
+      "type": "object",
+      "required": [
+        "output_digest"
+      ],
+      "properties": {
+        "output_digest": {
+          "$ref": "#/$defs/sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "proofCorrectness": {
+      "type": "object",
+      "required": [
+        "output_digest",
+        "verification_verdict"
+      ],
+      "properties": {
+        "output_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "input_commitment_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "output_commitment_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "verification_verdict": {
+          "const": "accepted"
+        }
+      },
+      "additionalProperties": false
+    },
+    "failedProofCorrectness": {
+      "type": "object",
+      "required": [
+        "verification_verdict"
+      ],
+      "properties": {
+        "output_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "input_commitment_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "output_commitment_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "verification_verdict": {
+          "const": "rejected"
+        }
+      },
+      "additionalProperties": false
+    },
+    "failureCorrectness": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/executionCorrectness"
+        },
+        {
+          "$ref": "#/$defs/failedProofCorrectness"
+        }
+      ]
+    },
+    "correctness": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/executionCorrectness"
+        },
+        {
+          "$ref": "#/$defs/proofCorrectness"
+        }
+      ]
+    },
+    "requireExecutionSuccessCorrectness": {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "success"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "correctness": {
+            "$ref": "#/$defs/executionCorrectness"
+          }
+        },
+        "required": [
+          "correctness"
+        ]
+      }
+    },
+    "requireProofSuccessCorrectness": {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "success"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "correctness": {
+            "$ref": "#/$defs/proofCorrectness"
+          }
+        },
+        "required": [
+          "correctness"
+        ]
+      }
+    },
+    "validateExecutionFailureCorrectness": {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "status",
+          "correctness"
+        ]
+      },
+      "then": {
+        "properties": {
+          "correctness": {
+            "$ref": "#/$defs/executionCorrectness"
+          }
+        }
+      }
+    },
+    "validateProofFailureCorrectness": {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "status",
+          "correctness"
+        ]
+      },
+      "then": {
+        "properties": {
+          "correctness": {
+            "$ref": "#/$defs/failedProofCorrectness"
+          }
+        }
+      }
+    },
+    "forbidCorrectness": {
+      "not": {
+        "required": [
+          "correctness"
+        ]
+      }
+    },
+    "sampleIdentity": {
+      "type": "object",
+      "required": [
+        "id",
+        "attempt_id",
+        "attempt_index",
+        "schedule_position",
+        "warmup",
+        "started_at",
+        "finished_at",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "attempt_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "schedule_position": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warmup": {
+          "type": "boolean"
+        },
+        "started_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "finished_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "enum": [
+            "success",
+            "unsupported",
+            "failed",
+            "timed_out",
+            "invalid"
+          ]
+        },
+        "replacement_attempt_id": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "durationSampleOutcome": {
+      "oneOf": [
+        {
+          "properties": {
+            "status": {
+              "const": "success"
+            },
+            "timing": {
+              "$ref": "#/$defs/timing"
+            },
+            "correctness": {
+              "$ref": "#/$defs/correctness"
+            }
+          },
+          "required": [
+            "status",
+            "timing"
+          ]
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "unsupported"
+            },
+            "reason": {
+              "$ref": "#/$defs/reason"
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ]
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "failed"
+            },
+            "error_code": {
+              "$ref": "#/$defs/slug"
+            },
+            "reason": {
+              "$ref": "#/$defs/reason"
+            },
+            "diagnostic_timing": {
+              "$ref": "#/$defs/timing"
+            },
+            "correctness": {
+              "$ref": "#/$defs/failureCorrectness"
+            }
+          },
+          "required": [
+            "status",
+            "error_code",
+            "reason"
+          ]
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "timed_out"
+            },
+            "error_code": {
+              "$ref": "#/$defs/slug"
+            },
+            "reason": {
+              "$ref": "#/$defs/reason"
+            },
+            "diagnostic_timing": {
+              "$ref": "#/$defs/timing"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "invalid"
+            },
+            "error_code": {
+              "$ref": "#/$defs/slug"
+            },
+            "reason": {
+              "$ref": "#/$defs/reason"
+            },
+            "diagnostic_timing": {
+              "$ref": "#/$defs/timing"
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ]
+        }
+      ]
+    },
+    "durationSample": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/sampleIdentity"
+        },
+        {
+          "$ref": "#/$defs/durationSampleOutcome"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "scalarSampleOutcome": {
+      "oneOf": [
+        {
+          "properties": {
+            "status": {
+              "const": "success"
+            },
+            "value": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "status",
+            "value"
+          ]
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "unsupported"
+            },
+            "reason": {
+              "$ref": "#/$defs/reason"
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ]
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "failed"
+            },
+            "error_code": {
+              "$ref": "#/$defs/slug"
+            },
+            "reason": {
+              "$ref": "#/$defs/reason"
+            }
+          },
+          "required": [
+            "status",
+            "error_code",
+            "reason"
+          ]
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "timed_out"
+            },
+            "error_code": {
+              "$ref": "#/$defs/slug"
+            },
+            "reason": {
+              "$ref": "#/$defs/reason"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        },
+        {
+          "properties": {
+            "status": {
+              "const": "invalid"
+            },
+            "error_code": {
+              "$ref": "#/$defs/slug"
+            },
+            "reason": {
+              "$ref": "#/$defs/reason"
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ]
+        }
+      ]
+    },
+    "scalarSample": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/sampleIdentity"
+        },
+        {
+          "$ref": "#/$defs/scalarSampleOutcome"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "statusCounts": {
+      "type": "object",
+      "required": [
+        "success",
+        "unsupported",
+        "failed",
+        "timed_out",
+        "invalid"
+      ],
+      "properties": {
+        "success": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unsupported": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timed_out": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalid": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "rates": {
+      "type": "object",
+      "required": [
+        "failure",
+        "timeout"
+      ],
+      "properties": {
+        "failure": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "timeout": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "availableStatistics": {
+      "type": "object",
+      "required": [
+        "status",
+        "sample_count",
+        "minimum",
+        "maximum",
+        "median",
+        "percentiles",
+        "included_attempt_ids",
+        "excluded_warmup_attempt_ids",
+        "flagged_outlier_attempt_ids",
+        "status_counts",
+        "rates"
+      ],
+      "properties": {
+        "status": {
+          "const": "available"
+        },
+        "sample_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "minimum": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maximum": {
+          "type": "number",
+          "minimum": 0
+        },
+        "median": {
+          "type": "number",
+          "minimum": 0
+        },
+        "mean": {
+          "description": "Arithmetic mean of the included sample values.",
+          "type": "number",
+          "minimum": 0
+        },
+        "standard_deviation": {
+          "description": "Sample standard deviation using an n - 1 denominator, or zero for one included value.",
+          "type": "number",
+          "minimum": 0
+        },
+        "percentiles": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^p(?:100|(?:[0-9]|[1-9][0-9])(?:\\.[0-9]+)?)$"
+          },
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "included_attempt_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/uuid"
+          }
+        },
+        "excluded_warmup_attempt_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/uuid"
+          }
+        },
+        "flagged_outlier_attempt_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/uuid"
+          }
+        },
+        "status_counts": {
+          "$ref": "#/$defs/statusCounts"
+        },
+        "rates": {
+          "$ref": "#/$defs/rates"
+        }
+      },
+      "additionalProperties": false
+    },
+    "unavailableStatistics": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason",
+        "status_counts",
+        "rates"
+      ],
+      "properties": {
+        "status": {
+          "const": "unavailable"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "status_counts": {
+          "$ref": "#/$defs/statusCounts"
+        },
+        "rates": {
+          "$ref": "#/$defs/rates"
+        }
+      },
+      "additionalProperties": false
+    },
+    "statistics": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/availableStatistics"
+        },
+        {
+          "$ref": "#/$defs/unavailableStatistics"
+        }
+      ]
+    },
+    "availableMeasurement": {
+      "type": "object",
+      "required": [
+        "metric",
+        "unit",
+        "availability",
+        "samples",
+        "statistics"
+      ],
+      "properties": {
+        "metric": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "phase": {
+          "$ref": "#/$defs/phase"
+        },
+        "availability": {
+          "const": "available"
+        },
+        "boundary": {
+          "$ref": "#/$defs/boundary"
+        },
+        "policy": {
+          "$ref": "#/$defs/durationMeasurementPolicy"
+        },
+        "samples": {
+          "type": "array",
+          "minItems": 1
+        },
+        "statistics": {
+          "$ref": "#/$defs/statistics"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/metricIdentity"
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "duration"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "required": [
+              "phase",
+              "boundary",
+              "policy"
+            ],
+            "properties": {
+              "samples": {
+                "items": {
+                  "$ref": "#/$defs/durationSample"
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "phase": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "standard"
+                        },
+                        "name": {
+                          "const": "execution"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "name"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "phase"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "samples": {
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/$defs/requireExecutionSuccessCorrectness"
+                          },
+                          {
+                            "$ref": "#/$defs/validateExecutionFailureCorrectness"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "phase": {
+                      "$ref": "#/$defs/proofRelatedPhase"
+                    }
+                  },
+                  "required": [
+                    "phase"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "samples": {
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/$defs/requireProofSuccessCorrectness"
+                          },
+                          {
+                            "$ref": "#/$defs/validateProofFailureCorrectness"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "phase": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "standard"
+                        },
+                        "name": {
+                          "enum": [
+                            "build",
+                            "setup"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "name"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "phase"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "samples": {
+                      "items": {
+                        "$ref": "#/$defs/forbidCorrectness"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "phase": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "combined"
+                        },
+                        "components": {
+                          "allOf": [
+                            {
+                              "contains": {
+                                "const": "execution"
+                              }
+                            },
+                            {
+                              "not": {
+                                "contains": {
+                                  "enum": [
+                                    "proving",
+                                    "compression",
+                                    "verification"
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "components"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "phase"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "samples": {
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/$defs/requireExecutionSuccessCorrectness"
+                          },
+                          {
+                            "$ref": "#/$defs/validateExecutionFailureCorrectness"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "phase": {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "combined"
+                        },
+                        "components": {
+                          "not": {
+                            "contains": {
+                              "enum": [
+                                "execution",
+                                "proving",
+                                "compression",
+                                "verification"
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "components"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "phase"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "samples": {
+                      "items": {
+                        "$ref": "#/$defs/forbidCorrectness"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          "else": {
+            "properties": {
+              "samples": {
+                "items": {
+                  "$ref": "#/$defs/scalarSample"
+                }
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "boundary"
+                  ]
+                },
+                {
+                  "required": [
+                    "policy"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "unavailableMeasurement": {
+      "type": "object",
+      "required": [
+        "metric",
+        "unit",
+        "availability",
+        "reason"
+      ],
+      "properties": {
+        "metric": {
+          "type": "string"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "phase": {
+          "$ref": "#/$defs/phase"
+        },
+        "availability": {
+          "const": "unavailable"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "policy": {
+          "$ref": "#/$defs/durationMeasurementPolicy"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/metricIdentity"
+        },
+        {
+          "if": {
+            "properties": {
+              "metric": {
+                "const": "duration"
+              }
+            },
+            "required": [
+              "metric"
+            ]
+          },
+          "then": {
+            "required": [
+              "phase",
+              "policy"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "policy"
+              ]
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "measurement": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/availableMeasurement"
+        },
+        {
+          "$ref": "#/$defs/unavailableMeasurement"
+        }
+      ]
+    },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "uri",
+        "media_type",
+        "byte_length",
+        "digest"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "kind": {
+          "enum": [
+            "proof",
+            "proving_key",
+            "verification_key",
+            "trace",
+            "log",
+            "profile",
+            "report",
+            "other"
+          ]
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri-reference"
+        },
+        "media_type": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$"
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/uuid"
+        }
+      },
+      "additionalProperties": false
+    },
+    "warning": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/slug"
+        },
+        "message": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^(?:/(?:[^~/]|~0|~1)*)*$"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/uuid"
+        }
+      },
+      "additionalProperties": false
+    },
+    "reportStatus": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "outcome"
+          ],
+          "properties": {
+            "outcome": {
+              "const": "successful"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "outcome",
+            "reason"
+          ],
+          "properties": {
+            "outcome": {
+              "enum": [
+                "failed",
+                "timed_out",
+                "partially_supported",
+                "invalid"
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/reason"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}
