@@ -324,6 +324,11 @@ Every non-successful report status includes a reason. Individual failed or
 timed-out samples remain in `measurements`; the top-level status is not a
 replacement for raw outcomes.
 
+A `failed` report MUST contain a failed attempt when any attempt was recorded.
+A fatal report-level harness failure before the first attempt MAY instead use
+the top-level reason as its only failure evidence. A producer MUST NOT relabel
+`unsupported`, `timed_out`, or `invalid` attempts as a failed report.
+
 ## 11. Schema evolution and unknown fields
 
 `schema_version` uses Semantic Versioning.

@@ -404,7 +404,7 @@ def _semantic_issues(report: dict[str, Any]) -> list[str]:
         issues.append(
             "semantic /status/outcome: successful status contradicts report data"
         )
-    if outcome == "failed" and not statuses["failed"]:
+    if outcome == "failed" and attempts and not statuses["failed"]:
         issues.append("semantic /status/outcome: failed report has no failed attempt")
     if outcome == "timed_out" and not statuses["timed_out"]:
         issues.append(

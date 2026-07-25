@@ -371,5 +371,17 @@
         "value": "accepted"
       }
     ]
+  },
+  {
+    "name": "failed report relabels a timed-out attempt",
+    "base": "timed-out.json",
+    "expected_layer": "semantic",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/status/outcome",
+        "value": "failed"
+      }
+    ]
   }
 ]

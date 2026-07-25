@@ -95,6 +95,23 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertIn('"name":"proving"', proof_size_issue)
         self.assertIn('"name":"end_to_end"', proof_size_issue)
 
+    def test_report_level_failure_before_first_attempt(self) -> None:
+        report = json.loads((REPORTS / "partially-supported.json").read_text())
+        report["measurements"] = [
+            measurement
+            for measurement in report["measurements"]
+            if measurement["availability"] == "unavailable"
+        ]
+        report["status"] = {
+            "outcome": "failed",
+            "reason": {
+                "code": "harness_start_failed",
+                "message": "The harness failed before the first attempt.",
+            },
+        }
+
+        self.assertEqual([], validate_report(report, self.schema))
+
     def test_negative_fixtures(self) -> None:
         cases = json.loads(INVALID_CASES.read_text())
         for case in cases:
