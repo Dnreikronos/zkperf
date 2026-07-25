@@ -107,12 +107,21 @@ engines and are not, by themselves, evidence of semantic inequivalence.
 ### 3.4 Committed output and statement
 
 The workload specification MUST define one canonical application output byte
-stream. A successful attempt MUST:
+stream. Build and reusable setup are not trial phases and have no application
+output, commitment, or verification obligation.
 
-1. produce bytes equal to the expected output;
-2. commit to the required input and output bytes; and
-3. expose enough public data for the verifier to check the same
+A successful `execution` phase MUST produce bytes equal to the expected
+application output. A successful proof-producing phase (`proving` or
+`compression`) MUST:
+
+1. preserve bytes equal to the expected application output;
+2. commit to the input and output bytes required by the workload
+   specification; and
+3. expose enough public data for the verifier to check the complete
    application-level statement.
+
+A successful `end_to_end` phase MUST satisfy the execution and proof-producing
+requirements above and the verification requirements in Section 3.5.
 
 Adapters MAY wrap the canonical output in an engine-specific journal, receipt,
 or public-values format. The adapter MUST decode that format and demonstrate
@@ -123,8 +132,14 @@ an input or output with one that does not is forbidden.
 
 Verification MUST use the verifier and verification parameters associated
 with the proof-producing engine and MUST check the complete statement required
-by the workload specification. A successful proving attempt with a missing,
-skipped, mocked, or partial verification attempt is not an end-to-end success.
+by the workload specification. A successful `verification` phase MUST return
+an accepting verdict for that statement. A successful `end_to_end` phase MUST
+include the same complete verification.
+
+An untimed verification used to establish correctness for `proving` or
+`compression` occurs after that phase's stop boundary and MUST NOT be included
+in its duration. Missing, skipped, mocked, or partial verification cannot
+establish correctness.
 
 The configured security target in bits MUST be the same for all engines in a
 comparison. Each engine configuration MUST meet or exceed it. Proof-system,
@@ -392,8 +407,23 @@ The following metadata is REQUIRED for a conforming record.
 | Lifecycle | preparation pins; build and setup cache states; setup reuse count; warm-up count; measured-trial count |
 | Schedule | concurrency mode; ordering algorithm; seed; complete planned order; attempt index and timestamps |
 | Measurement | phase or ordered combined phase; interface type; exact boundary implementation; clock source; start, stop, and duration in nanoseconds; timeout |
-| Outcome | status; output digest; commitment digests; verification verdict; error code and reason; replacement attempt ID |
+| Outcome | status; phase-applicable output digest, commitment digests, and verification verdict; status-applicable error code and reason; replacement attempt ID when applicable |
 | Statistics | included attempt IDs; excluded warm-up IDs; outlier rule and flagged IDs; percentile method |
+
+Outcome fields are phase- and status-specific. A field that does not apply MUST
+be absent rather than present with a null value.
+
+- A `success` MUST include every output digest, commitment digest, and
+  verification verdict required by the measured phase. It MUST omit error code
+  and reason.
+- An `unsupported` or `invalid` outcome MUST include the non-empty reason
+  required by Section 4.10 and MAY include an engine or harness error code.
+- A `failed` outcome MUST include a stable engine or harness error code and a
+  non-empty reason.
+- A `timed_out` outcome relies on the timeout in the Measurement metadata and
+  MAY include an engine or harness error code and reason.
+- `replacement_attempt_id` is REQUIRED only for a replacement attempt and MUST
+  point to the invalid attempt it replaces. It MUST be absent otherwise.
 
 Secrets and private input bytes MUST NOT be stored. Their digests, lengths, and
 generation procedure are still required.
