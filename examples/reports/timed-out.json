@@ -1,0 +1,265 @@
+{
+  "schema_version": "1.0.0",
+  "report_id": "81111111-1111-4111-8111-111111111111",
+  "contract": {
+    "id": "zkperf-fairness",
+    "version": "1.0.0"
+  },
+  "run": {
+    "id": "82222222-2222-4222-8222-222222222222",
+    "harness_revision": "git:7f83b165",
+    "suite": {
+      "id": "portable_fibonacci",
+      "revision": "git:45c48cce",
+      "manifest_digest": {
+        "algorithm": "sha256",
+        "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "started_at": "2026-07-25T14:00:00Z",
+    "finished_at": "2026-07-25T14:00:10Z",
+    "policy": {
+      "ordering_algorithm": "seeded_round_robin_v1",
+      "seed": 42,
+      "concurrency": {
+        "mode": "isolated",
+        "parallel_attempts": 1
+      },
+      "retry_policy": "no retries except replacements for invalid attempts",
+      "invalidation_policy": "replace only verified harness or external interference",
+      "outlier_rule": "none",
+      "percentile_method": "linear"
+    },
+    "planned_order": [
+      {
+        "position": 0,
+        "engine_id": "example_zkvm",
+        "phase": {
+          "kind": "standard",
+          "name": "proving"
+        },
+        "attempt_index": 0,
+        "warmup": false
+      }
+    ]
+  },
+  "benchmark": {
+    "case_id": "fibonacci_1000",
+    "workload": {
+      "revision": "git:6512bd43",
+      "specification_digest": {
+        "algorithm": "sha256",
+        "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    "implementation_lane": "portable",
+    "canonical_input": {
+      "byte_length": 8,
+      "digest": {
+        "algorithm": "sha256",
+        "value": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "visibility": "private",
+      "preprocessing_policy": "none"
+    },
+    "expected_output_digest": {
+      "algorithm": "sha256",
+      "value": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "statement": "The committed output is Fibonacci(1000) for the committed canonical input.",
+    "commitment_policy": {
+      "input": "digest",
+      "output": "bytes"
+    },
+    "security_target_bits": 100,
+    "lifecycle": {
+      "profile": "cold",
+      "preparation_pins": [
+        "nixpkgs:24.11",
+        "rust:1.88.0"
+      ],
+      "build_cache_state": "cold",
+      "setup_cache_state": "cold",
+      "setup_reuse_count": 1
+    },
+    "parameters": {
+      "n": 1000
+    }
+  },
+  "engine": {
+    "id": "example_zkvm",
+    "name": "Example zkVM",
+    "version": "2.4.0",
+    "adapter_revision": "git:4a44dc15",
+    "proof_system": "STARK",
+    "backend": "cpu",
+    "configured_security_bits": 100,
+    "trust_profile": "transparent",
+    "guest": {
+      "source_revision": "git:6512bd43",
+      "toolchain": {
+        "name": "rust",
+        "version": "1.88.0"
+      },
+      "compiler": {
+        "name": "rustc",
+        "version": "1.88.0",
+        "flags": [
+          "-C",
+          "opt-level=3"
+        ]
+      },
+      "artifact_digest": {
+        "algorithm": "sha256",
+        "value": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "optimizations": []
+    },
+    "proof": {
+      "raw_format": "example-stark-v2",
+      "final_format": "example-stark-v2",
+      "transformation_pipeline": [],
+      "verifier": {
+        "name": "example-verifier",
+        "version": "2.4.0"
+      },
+      "parameters_version": "2.4.0",
+      "parameters_digest": {
+        "algorithm": "sha256",
+        "value": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      }
+    },
+    "configuration": {
+      "fri_queries": 50
+    }
+  },
+  "environment": {
+    "host": {
+      "machine_id": "ci-mac-01",
+      "architecture": "aarch64",
+      "cpu": {
+        "model": "Apple M3 Pro",
+        "stepping": "0",
+        "physical_cores": 12,
+        "logical_cores": 12
+      },
+      "ram_bytes": 38654705664,
+      "accelerators": [],
+      "storage": "APPLE SSD AP1024Z",
+      "operating_system": {
+        "name": "macOS",
+        "version": "15.5",
+        "kernel": "Darwin 24.5.0"
+      },
+      "firmware_or_microcode": "iBoot-11881.121.1"
+    },
+    "resources": {
+      "power_profile": "ac_power_high_performance",
+      "cpu_affinity": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "cpu_limit": 8,
+      "memory_limit_bytes": 17179869184,
+      "worker_count": 8,
+      "accelerator_allocation": [],
+      "environment_variables": {
+        "RAYON_NUM_THREADS": "8"
+      },
+      "execution_mode": "local",
+      "network_access": false
+    },
+    "clock": {
+      "source": "mach_continuous_time",
+      "resolution_ns": 1,
+      "monotonic": true
+    }
+  },
+  "measurements": [
+    {
+      "metric": "duration",
+      "unit": "nanosecond",
+      "phase": {
+        "kind": "standard",
+        "name": "proving"
+      },
+      "availability": "available",
+      "boundary": {
+        "interface": "in_process",
+        "start": "Immediately before invoking the prover with the execution result ready.",
+        "stop": "When the declared timeout expires and the prover is terminated."
+      },
+      "policy": {
+        "warmup_count": 0,
+        "measured_trial_count": 1,
+        "timeout": {
+          "limit_ns": 10000000000,
+          "enforcement": "host_watchdog",
+          "termination_grace_ns": 1000000000
+        }
+      },
+      "samples": [
+        {
+          "id": "80000000-0000-4000-8000-000000000001",
+          "attempt_id": "90000000-0000-4000-8000-000000000001",
+          "attempt_index": 0,
+          "schedule_position": 0,
+          "warmup": false,
+          "started_at": "2026-07-25T14:00:00Z",
+          "finished_at": "2026-07-25T14:00:10Z",
+          "status": "timed_out",
+          "error_code": "timeout",
+          "reason": {
+            "code": "timeout_expired",
+            "message": "The proving phase exceeded its 10 second limit."
+          },
+          "diagnostic_timing": {
+            "start_ns": 1000000,
+            "stop_ns": 10001000000,
+            "duration_ns": 10000000000
+          }
+        }
+      ],
+      "statistics": {
+        "status": "unavailable",
+        "reason": {
+          "code": "no_successful_samples",
+          "message": "The only measured attempt timed out and is not eligible for latency statistics."
+        },
+        "status_counts": {
+          "success": 0,
+          "unsupported": 0,
+          "failed": 0,
+          "timed_out": 1,
+          "invalid": 0
+        },
+        "rates": {
+          "failure": 0,
+          "timeout": 1
+        }
+      }
+    }
+  ],
+  "artifacts": [],
+  "warnings": [
+    {
+      "code": "diagnostic_timing_excluded",
+      "message": "Elapsed time from the timed-out attempt is diagnostic and excluded from statistics.",
+      "path": "/measurements/0/samples/0/diagnostic_timing",
+      "attempt_id": "90000000-0000-4000-8000-000000000001"
+    }
+  ],
+  "status": {
+    "outcome": "timed_out",
+    "reason": {
+      "code": "required_phase_timed_out",
+      "message": "The required proving phase timed out."
+    }
+  }
+}
