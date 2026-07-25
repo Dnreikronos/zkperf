@@ -262,6 +262,10 @@ An available summary MUST include:
 - counts for every sample status; and
 - failure and timeout rates over non-warm-up scheduled attempts.
 
+An available summary MAY also include the arithmetic mean and sample standard
+deviation of the included values. `standard_deviation` uses the sample
+estimator with an `n - 1` denominator when `n > 1` and is zero when `n = 1`.
+
 `included_attempt_ids` MUST contain every valid, successful, non-warm-up
 attempt used by the primary summary and no other attempt. Primary summaries
 MUST NOT exclude statistical outliers. `flagged_outlier_attempt_ids` is

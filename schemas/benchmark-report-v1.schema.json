@@ -1822,10 +1822,12 @@
           "minimum": 0
         },
         "mean": {
+          "description": "Arithmetic mean of the included sample values.",
           "type": "number",
           "minimum": 0
         },
         "standard_deviation": {
+          "description": "Sample standard deviation using an n - 1 denominator, or zero for one included value.",
           "type": "number",
           "minimum": 0
         },
