@@ -172,8 +172,10 @@ If an engine operation is asynchronous, the stop boundary occurs only after an
 explicit synchronization confirms completion. Lazy work triggered after a
 return MUST be synchronized and included in the phase that caused it.
 
-Phases MUST NOT overlap. Host orchestration between phase boundaries is
-excluded from individual phase durations and included in `end_to_end`.
+Component phase measurements MUST NOT overlap one another. `end_to_end` is a
+separate aggregate measurement and intentionally contains the trial component
+phases. Host orchestration between component phase boundaries is excluded from
+their individual durations and included in `end_to_end`.
 
 ### 4.2 Preparation
 
@@ -181,9 +183,14 @@ Preparation includes installing toolchains, downloading dependencies or public
 parameters, provisioning the host, and obtaining source code. It is not a
 timed phase. Every preparation input MUST still be pinned and recorded.
 
-Network access MUST be disabled during measured phases. A suite that
-intentionally measures remote proving MUST define a separate resource profile
-and MUST NOT compare it with local proving.
+Network access MUST be disabled during measured local phases. Intentionally
+measured remote proving is the only exception and MUST use a separate,
+network-enabled `remote` resource profile. That profile MUST record the
+endpoint URI or stable non-secret identifier, client and endpoint regions,
+transport, connection type, and observed round-trip latency, jitter, packet
+loss, and available bandwidth, including the measurement method and timestamp.
+Remote proving results MUST NOT be compared with local proving or with a
+different remote resource profile.
 
 ### 4.3 Build
 
@@ -286,6 +293,10 @@ I/O for every engine and identify the profile as `verification_with_io`.
 It includes execution, proving, the configured compression pipeline,
 verification, and inter-phase adapter overhead. It excludes preparation,
 build, and reusable setup.
+
+`end_to_end` is an aggregate measurement, not a component phase. Its
+intentional containment of the trial component phases does not violate the
+non-overlap rule in Section 4.1.
 
 ### 4.10 Combined and unsupported phases
 
