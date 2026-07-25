@@ -91,6 +91,7 @@ def _semantic_issues(report: dict[str, Any]) -> list[str]:
     attempts: dict[str, dict[str, Any]] = {}
     proof_required: set[tuple[str, str]] = set()
     proof_sizes: Counter[tuple[str, str]] = Counter()
+    proof_size_phases: dict[str, set[str]] = {}
 
     for measurement_index, measurement in enumerate(report["measurements"]):
         phase = measurement.get("phase")
@@ -245,6 +246,7 @@ def _semantic_issues(report: dict[str, Any]) -> list[str]:
 
             if measurement["metric"] == "proof_size" and sample["status"] == "success":
                 proof_sizes[(phase_key, attempt_id)] += 1
+                proof_size_phases.setdefault(attempt_id, set()).add(phase_key)
 
         summary = measurement["statistics"]
         counts = Counter(sample["status"] for sample in samples)
@@ -371,8 +373,11 @@ def _semantic_issues(report: dict[str, Any]) -> list[str]:
     for phase_key, attempt_id in proof_required:
         count = proof_sizes[(phase_key, attempt_id)]
         if count != 1:
+            observed_phases = sorted(proof_size_phases.get(attempt_id, set()))
+            observed = ", ".join(observed_phases) if observed_phases else "none"
             issues.append(
-                f"semantic attempt {attempt_id}: expected one proof_size observation, found {count}"
+                f"semantic attempt {attempt_id}: expected one proof_size observation "
+                f"for phase {phase_key}, found {count}; observed phases: {observed}"
             )
 
     for collection_name in ("artifacts", "warnings"):

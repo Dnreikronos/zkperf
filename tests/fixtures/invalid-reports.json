@@ -96,6 +96,17 @@
     ]
   },
   {
+    "name": "proof size omits its phase",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "remove",
+        "path": "/measurements/1/phase"
+      }
+    ]
+  },
+  {
     "name": "numeric prerelease has leading zero",
     "base": "successful.json",
     "expected_layer": "schema",

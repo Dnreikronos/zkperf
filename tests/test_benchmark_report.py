@@ -78,6 +78,23 @@ class BenchmarkReportTests(unittest.TestCase):
                         del sample["correctness"]
                 self.assertEqual([], validate_report(report, self.schema))
 
+    def test_proof_size_phase_mismatch_is_diagnosable(self) -> None:
+        report = json.loads((REPORTS / "successful.json").read_text())
+        report["measurements"][1]["phase"] = {
+            "kind": "standard",
+            "name": "end_to_end",
+        }
+
+        issues = validate_report(report, self.schema)
+
+        proof_size_issue = next(
+            issue
+            for issue in issues
+            if "expected one proof_size observation for phase" in issue
+        )
+        self.assertIn('"name":"proving"', proof_size_issue)
+        self.assertIn('"name":"end_to_end"', proof_size_issue)
+
     def test_negative_fixtures(self) -> None:
         cases = json.loads(INVALID_CASES.read_text())
         for case in cases:

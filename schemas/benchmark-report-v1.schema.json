@@ -1159,7 +1159,8 @@
           },
           "required": [
             "metric",
-            "unit"
+            "unit",
+            "phase"
           ]
         },
         {
