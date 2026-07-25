@@ -498,28 +498,31 @@ speed ratio or rank between them.
 
 Automated tests for every adapter and result writer MUST cover these assertions:
 
-1. Changing any field named in `C01` through `C09` causes the expected rule to
-   fail.
-2. Engine-specific fields allowed after `C12` may differ without failing an
-   otherwise valid comparison.
-3. Canonical input and output fixtures round-trip through every adapter without
+1. Changing the contract ID or selecting an incompatible contract version
+   fails `C01_CONTRACT`. An explicitly declared backward-compatible MINOR or
+   PATCH version change passes it, as required by Section 1.
+2. Changing any field governed by `C02` through `C09` causes the expected rule
+   to fail.
+3. Engine-specific fields identified in Section 7 as not compared by `C01`
+   through `C12` may differ without failing an otherwise valid comparison.
+4. Canonical input and output fixtures round-trip through every adapter without
    byte changes.
-4. Mutating committed input or output causes verification or the harness
+5. Mutating committed input or output causes verification or the harness
    correctness check to fail.
-5. An unavailable phase is emitted as `unsupported` with a reason and never as
+6. An unavailable phase is emitted as `unsupported` with a reason and never as
    zero duration.
-6. An inseparable phase is emitted as the exact ordered `combined:` phase and
+7. An inseparable phase is emitted as the exact ordered `combined:` phase and
    is not comparable with an individual component.
-7. Failed, timed-out, invalid, and warm-up attempts are retained and excluded
+8. Failed, timed-out, invalid, and warm-up attempts are retained and excluded
    from latency statistics according to this contract.
-8. Primary statistics contain every valid successful measured trial and no
+9. Primary statistics contain every valid successful measured trial and no
    other attempt.
-9. The saved schedule is reproducible from the declared algorithm and seed,
+10. The saved schedule is reproducible from the declared algorithm and seed,
    and actual execution order matches it.
-10. Every reported duration follows `stop_ns >= start_ns` and
+11. Every reported duration follows `stop_ns >= start_ns` and
     `duration_ns = stop_ns - start_ns`.
-11. An asynchronous adapter cannot stop timing before explicit completion.
-12. A record missing any required metadata fails `C12_DISCLOSURE`.
+12. An asynchronous adapter cannot stop timing before explicit completion.
+13. A record missing any required metadata fails `C12_DISCLOSURE`.
 
 Passing these assertions demonstrates harness behavior, not workload semantic
 equivalence. Each workload still requires reviewed fixtures and cross-engine
