@@ -1,0 +1,352 @@
+[
+  {
+    "name": "unavailable duration missing policy",
+    "base": "partially-supported.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "remove",
+        "path": "/measurements/1/policy"
+      }
+    ]
+  },
+  {
+    "name": "timeout missing enforcement mechanism",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "remove",
+        "path": "/measurements/0/policy/timeout/enforcement"
+      }
+    ]
+  },
+  {
+    "name": "timeout missing termination grace",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "remove",
+        "path": "/measurements/0/policy/timeout/termination_grace_ns"
+      }
+    ]
+  },
+  {
+    "name": "successful proof has rejected verdict",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/measurements/0/samples/1/correctness/verification_verdict",
+        "value": "rejected"
+      }
+    ]
+  },
+  {
+    "name": "legacy metric-local replacement reference",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "add",
+        "path": "/measurements/0/samples/1/replacement_for_sample_id",
+        "value": "10000000-0000-4000-8000-000000000001"
+      }
+    ]
+  },
+  {
+    "name": "replacement target does not exist",
+    "base": "successful.json",
+    "expected_layer": "semantic",
+    "operations": [
+      {
+        "op": "add",
+        "path": "/measurements/0/samples/1/replacement_attempt_id",
+        "value": "99999999-9999-4999-8999-999999999999"
+      },
+      {
+        "op": "add",
+        "path": "/measurements/1/samples/1/replacement_attempt_id",
+        "value": "99999999-9999-4999-8999-999999999999"
+      }
+    ]
+  },
+  {
+    "name": "proof parameter version missing",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "remove",
+        "path": "/engine/proof/parameters_version"
+      }
+    ]
+  },
+  {
+    "name": "successful proof has no proof size",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "remove",
+        "path": "/measurements/1"
+      }
+    ]
+  },
+  {
+    "name": "numeric prerelease has leading zero",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/contract/version",
+        "value": "1.0.0-01"
+      }
+    ]
+  },
+  {
+    "name": "prerelease contains empty identifier",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/contract/version",
+        "value": "1.0.0-a..b"
+      }
+    ]
+  },
+  {
+    "name": "percentile exceeds one hundred",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "add",
+        "path": "/measurements/0/statistics/percentiles/p100.1",
+        "value": 110000
+      }
+    ]
+  },
+  {
+    "name": "unavailable metric encoded as zero",
+    "base": "partially-supported.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "add",
+        "path": "/measurements/1/value",
+        "value": 0
+      }
+    ]
+  },
+  {
+    "name": "required commitment digest missing",
+    "base": "successful.json",
+    "expected_layer": "semantic",
+    "operations": [
+      {
+        "op": "remove",
+        "path": "/measurements/0/samples/1/correctness/input_commitment_digest"
+      }
+    ]
+  },
+  {
+    "name": "proof size missing for one successful attempt",
+    "base": "successful.json",
+    "expected_layer": "semantic",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/measurements/1/samples/3/attempt_id",
+        "value": "20000000-0000-4000-8000-000000000002"
+      }
+    ]
+  },
+  {
+    "name": "eligible successful attempt omitted from summary",
+    "base": "successful.json",
+    "expected_layer": "semantic",
+    "operations": [
+      {
+        "op": "remove",
+        "path": "/measurements/0/statistics/included_attempt_ids/2"
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/0/statistics/sample_count",
+        "value": 2
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/0/statistics/minimum",
+        "value": 100000
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/0/statistics/median",
+        "value": 105000
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/0/statistics/mean",
+        "value": 105000
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/0/statistics/standard_deviation",
+        "value": 7071.067811865475
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/0/statistics/percentiles/p50",
+        "value": 105000
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/0/statistics/percentiles/p95",
+        "value": 109500
+      }
+    ]
+  },
+  {
+    "name": "configured security below benchmark target",
+    "base": "successful.json",
+    "expected_layer": "semantic",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/engine/configured_security_bits",
+        "value": 99
+      }
+    ]
+  },
+  {
+    "name": "successful report retains unsupported attempt",
+    "base": "successful.json",
+    "expected_layer": "semantic",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/measurements/0/samples/0/status",
+        "value": "unsupported"
+      },
+      {
+        "op": "remove",
+        "path": "/measurements/0/samples/0/timing"
+      },
+      {
+        "op": "remove",
+        "path": "/measurements/0/samples/0/correctness"
+      },
+      {
+        "op": "add",
+        "path": "/measurements/0/samples/0/reason",
+        "value": {
+          "code": "unsupported_attempt",
+          "message": "The engine reported the warm-up attempt as unsupported."
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/0/statistics/status_counts/success",
+        "value": 3
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/0/statistics/status_counts/unsupported",
+        "value": 1
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/1/samples/0/status",
+        "value": "unsupported"
+      },
+      {
+        "op": "remove",
+        "path": "/measurements/1/samples/0/value"
+      },
+      {
+        "op": "add",
+        "path": "/measurements/1/samples/0/reason",
+        "value": {
+          "code": "unsupported_attempt",
+          "message": "The engine reported the warm-up attempt as unsupported."
+        }
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/1/statistics/status_counts/success",
+        "value": 3
+      },
+      {
+        "op": "replace",
+        "path": "/measurements/1/statistics/status_counts/unsupported",
+        "value": 1
+      }
+    ]
+  },
+  {
+    "name": "statistics override percentile policy",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "add",
+        "path": "/measurements/0/statistics/percentile_method",
+        "value": "lower"
+      }
+    ]
+  },
+  {
+    "name": "percentiles ignore declared run policy",
+    "base": "successful.json",
+    "expected_layer": "semantic",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/run/policy/percentile_method",
+        "value": "lower"
+      }
+    ]
+  },
+  {
+    "name": "artifact references unknown attempt",
+    "base": "successful.json",
+    "expected_layer": "semantic",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/artifacts/0/attempt_id",
+        "value": "99999999-9999-4999-8999-999999999999"
+      }
+    ]
+  },
+  {
+    "name": "warning references unknown attempt",
+    "base": "failed.json",
+    "expected_layer": "semantic",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/warnings/0/attempt_id",
+        "value": "99999999-9999-4999-8999-999999999999"
+      }
+    ]
+  },
+  {
+    "name": "failed proof records accepted verdict",
+    "base": "failed.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/measurements/0/samples/0/correctness/verification_verdict",
+        "value": "accepted"
+      }
+    ]
+  }
+]
