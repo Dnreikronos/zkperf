@@ -433,11 +433,17 @@ def main() -> int:
     parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA)
     args = parser.parse_args()
 
-    schema = json.loads(args.schema.read_text())
+    schema = json.loads(args.schema.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     failed = False
     for path in args.reports:
-        report = json.loads(path.read_text())
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            failed = True
+            print(f"{path}: INVALID")
+            print(f"  read: {error}")
+            continue
         issues = validate_report(report, schema)
         if issues:
             failed = True

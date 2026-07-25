@@ -1,5 +1,8 @@
 import copy
 import json
+import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
@@ -111,6 +114,36 @@ class BenchmarkReportTests(unittest.TestCase):
         }
 
         self.assertEqual([], validate_report(report, self.schema))
+
+    def test_cli_reports_bad_inputs_and_continues(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            missing = temp / "missing.json"
+            malformed = temp / "malformed.json"
+            malformed.write_text("{", encoding="utf-8")
+            invalid_utf8 = temp / "invalid-utf8.json"
+            invalid_utf8.write_bytes(b"\xff")
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "tools" / "validate_benchmark_reports.py"),
+                    str(missing),
+                    str(malformed),
+                    str(invalid_utf8),
+                    str(REPORTS / "successful.json"),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn(f"{missing}: INVALID", result.stdout)
+        self.assertIn(f"{malformed}: INVALID", result.stdout)
+        self.assertIn(f"{invalid_utf8}: INVALID", result.stdout)
+        self.assertIn("successful.json: valid", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
 
     def test_negative_fixtures(self) -> None:
         cases = json.loads(INVALID_CASES.read_text())
