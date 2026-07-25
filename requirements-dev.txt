@@ -1,2 +1,2 @@
 # Requires Python >=3.10.
-jsonschema==4.26.0
+jsonschema[format-nongpl]==4.26.0

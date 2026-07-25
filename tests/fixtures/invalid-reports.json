@@ -120,6 +120,18 @@
     ]
   },
   {
+    "name": "timestamp is not RFC 3339",
+    "base": "successful.json",
+    "expected_layer": "schema",
+    "operations": [
+      {
+        "op": "replace",
+        "path": "/run/started_at",
+        "value": "not-a-date"
+      }
+    ]
+  },
+  {
     "name": "percentile exceeds one hundred",
     "base": "successful.json",
     "expected_layer": "schema",
