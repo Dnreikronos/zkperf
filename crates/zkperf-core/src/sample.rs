@@ -9,6 +9,7 @@ use crate::metadata::{Commitment, CommitmentPolicy, Sha256Digest};
 use crate::{AttemptId, NonEmptyString, SampleId, Slug, Timestamp, Timing};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum SampleError {
     FinishedBeforeStarted,
     InvalidOutcome(SampleStatus),
