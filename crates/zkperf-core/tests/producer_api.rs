@@ -3,19 +3,19 @@ use std::num::NonZeroU64;
 
 use serde_json::Map;
 use zkperf_core::{
-    Architecture, BenchmarkJob, BenchmarkMetadata, BenchmarkMetadataParts, BenchmarkReportV1,
-    BenchmarkReportV1Parts, BuildCacheState, ByteSize, CanonicalInput, CanonicalInputParts,
-    ClockMetadata, Commitment, CommitmentPolicy, CompatibilityMetadata, CompilerMetadata,
-    Concurrency, ConcurrencyMode, Correctness, CpuMetadata, DurationOutcome, EngineMetadata,
-    EngineMetadataParts, EnvironmentMetadata, EnvironmentMetadataParts, ExecutionMode,
-    FailedProofCorrectness, GuestMetadata, GuestMetadataParts, HostMetadata, HostMetadataParts,
-    ImplementationLane, InputVisibility, Lifecycle, LifecycleParts, LifecycleProfile, Measurement,
-    MeasurementError, Nanoseconds, NonEmptyString, OperatingSystemMetadata, PercentileMethod,
-    Phase, ProofCorrectness, ProofMetadata, ProofMetadataParts, Reason, ReportStatus,
-    ResourceLimit, Resources, ResourcesParts, RunMetadata, RunMetadataParts, RunPolicy,
-    RunPolicyParts, ScalarMeasurement, SemanticVersion, SetupCacheState, Sha256Digest, Slug,
-    StandardPhase, SuiteMetadata, SuiteMetadataParts, Timestamp, Timing, ToolMetadata,
-    WorkloadMetadata,
+    Architecture, BenchmarkJob, BenchmarkMetadata, BenchmarkMetadataParts, BenchmarkReport,
+    BenchmarkReportV1, BenchmarkReportV1Parts, BuildCacheState, ByteSize, CanonicalInput,
+    CanonicalInputParts, ClockMetadata, Commitment, CommitmentPolicy, CompatibilityMetadata,
+    CompilerMetadata, Concurrency, ConcurrencyMode, Correctness, CpuMetadata, DurationOutcome,
+    EngineMetadata, EngineMetadataParts, EnvironmentMetadata, EnvironmentMetadataParts,
+    ExecutionMode, FailedProofCorrectness, GuestMetadata, GuestMetadataParts, HostMetadata,
+    HostMetadataParts, ImplementationLane, InputVisibility, Lifecycle, LifecycleParts,
+    LifecycleProfile, Measurement, MeasurementError, Nanoseconds, NonEmptyString,
+    OperatingSystemMetadata, PercentileMethod, Phase, ProofCorrectness, ProofMetadata,
+    ProofMetadataParts, Reason, ReportStatus, ResourceLimit, Resources, ResourcesParts,
+    RunMetadata, RunMetadataParts, RunPolicy, RunPolicyParts, ScalarMeasurement, SemanticVersion,
+    SetupCacheState, Sha256Digest, Slug, StandardPhase, SuiteMetadata, SuiteMetadataParts,
+    Timestamp, Timing, ToolMetadata, WorkloadMetadata,
 };
 
 fn text(value: &str) -> NonEmptyString {
@@ -188,9 +188,13 @@ fn external_producer_builds_report_without_json_deserialization() {
     .unwrap();
 
     assert_eq!(
-        serde_json::to_value(report).unwrap()["schema_version"],
+        serde_json::to_value(&report).unwrap()["schema_version"],
         "1.0.0"
     );
+
+    let json = serde_json::to_string(&report).unwrap();
+    let round_tripped = BenchmarkReport::from_json(&json).unwrap();
+    assert_eq!(round_tripped.as_v1(), &report);
 }
 
 #[test]

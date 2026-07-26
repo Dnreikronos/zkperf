@@ -778,7 +778,11 @@ pub struct HostMetadata {
     accelerators: Vec<NonEmptyString>,
     storage: NonEmptyString,
     operating_system: OperatingSystemMetadata,
-    #[serde(default, deserialize_with = "crate::deserialize_optional_non_null")]
+    #[serde(
+        default,
+        deserialize_with = "crate::deserialize_optional_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     firmware_or_microcode: Option<NonEmptyString>,
 }
 
