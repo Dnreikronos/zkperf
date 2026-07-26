@@ -74,10 +74,12 @@ def verify_dependency_boundaries(cargo: str) -> None:
             "and this check deliberately"
         )
 
+    workspace_package_names = set(packages)
     for package_name, expected in EXPECTED_DEPENDENCIES.items():
         dependencies = {
             dependency["name"]
             for dependency in packages[package_name]["dependencies"]
+            if dependency["name"] in workspace_package_names
         }
         if dependencies != expected:
             raise SystemExit(
