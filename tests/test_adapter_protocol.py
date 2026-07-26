@@ -139,6 +139,37 @@ class AdapterProtocolTests(unittest.TestCase):
         self.assertIn("schema", result.stdout)
         self.assertNotIn("Traceback", result.stderr)
 
+    def test_cli_reports_invalid_schema_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            malformed = root / "malformed-schema.json"
+            malformed.write_text("{", encoding="utf-8")
+            invalid = root / "invalid-schema.json"
+            invalid.write_text('{"type": 7}', encoding="utf-8")
+            paths = (
+                root / "missing-schema.json",
+                malformed,
+                invalid,
+            )
+
+            for path in paths:
+                with self.subTest(schema=path.name):
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(ROOT / "tools" / "validate_adapter_protocol.py"),
+                            "--schema",
+                            str(path),
+                            str(EXAMPLES_PATH),
+                        ],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertEqual(1, result.returncode)
+                    self.assertIn("INVALID SCHEMA", result.stdout)
+                    self.assertNotIn("Traceback", result.stderr)
+
     def test_examples_cover_operations_stages_and_outcomes(self) -> None:
         requests = [exchange["request"] for exchange in self.examples["exchanges"]]
         responses = [

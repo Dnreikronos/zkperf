@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema.exceptions import SchemaError
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SCHEMA = ROOT / "schemas" / "adapter-protocol-v1.schema.json"
@@ -742,8 +743,19 @@ def main() -> int:
     parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA)
     args = parser.parse_args()
 
-    schema = json.loads(args.schema.read_text(encoding="utf-8"))
-    Draft202012Validator.check_schema(schema)
+    try:
+        schema = json.loads(args.schema.read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
+    except (
+        OSError,
+        UnicodeError,
+        json.JSONDecodeError,
+        SchemaError,
+    ) as error:
+        print(f"{args.schema}: INVALID SCHEMA")
+        print(f"  schema: {error}")
+        return 1
+
     failed = False
     for path in args.catalogs:
         try:
