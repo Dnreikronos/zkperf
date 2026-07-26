@@ -220,6 +220,91 @@ class AdapterProtocolTests(unittest.TestCase):
                 )
                 self.assertTrue(any(expected in issue for issue in issues))
 
+    def test_workspace_roots_must_be_disjoint(self) -> None:
+        cases = (
+            (
+                "equal",
+                {
+                    "inputs_dir": "shared",
+                    "outputs_dir": "shared",
+                    "control_dir": "control",
+                },
+                "inputs_dir and outputs_dir",
+            ),
+            (
+                "input ancestor",
+                {
+                    "inputs_dir": "shared",
+                    "outputs_dir": "shared/outputs",
+                    "control_dir": "control",
+                },
+                "inputs_dir and outputs_dir",
+            ),
+            (
+                "control descendant",
+                {
+                    "inputs_dir": "shared",
+                    "outputs_dir": "outputs",
+                    "control_dir": "shared/control",
+                },
+                "inputs_dir and control_dir",
+            ),
+        )
+        for name, workspace, expected in cases:
+            exchange = copy.deepcopy(self.exchange("capabilities"))
+            exchange["request"]["workspace"] = workspace
+            with self.subTest(case=name):
+                self.assertValid(exchange["request"])
+                issues = validate_exchange(
+                    exchange["request"],
+                    exchange["response"],
+                    self.schema,
+                )
+                self.assertTrue(
+                    any(
+                        expected in issue and "disjoint roots" in issue
+                        for issue in issues
+                    )
+                )
+
+    def test_opaque_json_is_not_treated_as_artifact_input(self) -> None:
+        fake_artifact = copy.deepcopy(
+            self.exchange("execute")["request"]["params"]["canonical_input"]
+        )
+        fake_artifact["id"] = "opaque-fake"
+        fake_artifact["path"] = "opaque/fake.bin"
+
+        configuration = copy.deepcopy(self.exchange("execute"))
+        configuration["request"]["params"]["configuration"][
+            "artifact-shaped-value"
+        ] = fake_artifact
+
+        statement = copy.deepcopy(self.exchange("verify"))
+        statement["request"]["params"]["statement"][
+            "artifact-shaped-value"
+        ] = fake_artifact
+
+        extension = copy.deepcopy(self.exchange("execute"))
+        extension["request"]["params"]["canonical_input"]["extensions"] = {
+            "example.artifact": fake_artifact
+        }
+
+        for location, exchange in (
+            ("configuration", configuration),
+            ("statement", statement),
+            ("extensions", extension),
+        ):
+            with self.subTest(location=location):
+                self.assertValid(exchange["request"])
+                self.assertEqual(
+                    [],
+                    validate_exchange(
+                        exchange["request"],
+                        exchange["response"],
+                        self.schema,
+                    ),
+                )
+
     def test_response_artifact_ids_are_unique_for_every_status(self) -> None:
         source_artifact = self.exchange("prove_initial")["response"]["artifacts"][0]
         for name in ("execute", "unsupported_proof_mode", "proving_failure"):
@@ -273,10 +358,20 @@ class AdapterProtocolTests(unittest.TestCase):
             "Z:/nested/secret.bin",
             "inputs/../secret.bin",
             "inputs//input.bin",
+            "inputs/",
         ):
             with self.subTest(path=path):
                 mutated = copy.deepcopy(request)
                 mutated["params"]["canonical_input"]["path"] = path
+                self.assertInvalid(mutated)
+
+        workspace_request = copy.deepcopy(
+            self.exchange("capabilities")["request"]
+        )
+        for field in ("inputs_dir", "outputs_dir", "control_dir"):
+            with self.subTest(workspace=field):
+                mutated = copy.deepcopy(workspace_request)
+                mutated["workspace"][field] += "/"
                 self.assertInvalid(mutated)
 
     def test_measurement_boundaries_reject_unrelated_phases(self) -> None:

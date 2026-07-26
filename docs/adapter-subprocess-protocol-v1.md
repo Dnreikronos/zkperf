@@ -323,10 +323,16 @@ The working directory contains three host-created roots:
 | `control_dir` | Host-owned cancellation and control files. The adapter MUST NOT modify it. |
 
 All paths in messages use `/` separators, are relative, and MUST NOT contain an
-empty segment, `.` segment, `..` segment, backslash, or NUL. Before opening a
-path, both peers MUST resolve it against the applicable root and reject any
-escape, including an escape through a symbolic link, junction, mount, or
+empty segment, `.` segment, `..` segment, backslash, or NUL. A trailing `/`
+creates an empty final segment and is invalid. Before opening a path, both
+peers MUST resolve it against the applicable root and reject any escape,
+including an escape through a symbolic link, junction, mount, or
 platform-specific alias.
+
+The three workspace roots MUST be pairwise disjoint. Two roots are not
+disjoint when they are equal or when either is a path ancestor of the other.
+This keeps read-only inputs, adapter-owned outputs, and host-owned control
+files under separate ownership.
 
 Input artifacts are immutable for one invocation. An adapter MUST NOT update
 them in place. Output artifacts SHOULD be written to a temporary name inside
@@ -379,6 +385,11 @@ Artifact references also have operation-specific kinds:
 
 An identifier that resolves to an artifact of the wrong kind is invalid. Mere
 identifier existence is not sufficient.
+
+Only fields defined by an operation as artifact references participate in
+artifact ownership and validation. Artifact-shaped objects inside
+`configuration`, `statement`, `extensions`, or other opaque JSON remain
+namespaced data and MUST NOT be interpreted as protocol artifacts.
 
 ## 7. Operations
 

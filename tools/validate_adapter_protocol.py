@@ -97,24 +97,18 @@ def _duplicate_id_issues(items: list[dict[str, Any]], path: str) -> list[str]:
     return issues
 
 
-def _artifact_objects(value: Any) -> list[dict[str, Any]]:
-    artifacts: list[dict[str, Any]] = []
-    if isinstance(value, dict):
-        if {
-            "id",
-            "kind",
-            "path",
-            "media_type",
-            "byte_length",
-            "digest",
-        } <= value.keys():
-            artifacts.append(value)
-        for child in value.values():
-            artifacts.extend(_artifact_objects(child))
-    elif isinstance(value, list):
-        for child in value:
-            artifacts.extend(_artifact_objects(child))
-    return artifacts
+def _request_artifacts(request: dict[str, Any]) -> list[dict[str, Any]]:
+    operation = request["operation"]
+    params = request["params"]
+    if operation == "metadata":
+        return params["artifacts"]
+    if operation in {"prepare", "prove"}:
+        return params["input_artifacts"]
+    if operation == "execute":
+        return [params["canonical_input"], *params["prepared_artifacts"]]
+    if operation == "verify":
+        return [params["proof"]]
+    return []
 
 
 def _result_artifact_ids(result: dict[str, Any]) -> set[str]:
@@ -224,7 +218,7 @@ def _artifact_ownership_issues(
     issues: list[str] = []
     input_prefix = f"{request['workspace']['inputs_dir']}/"
     output_prefix = f"{request['workspace']['outputs_dir']}/"
-    for artifact in _artifact_objects(request["params"]):
+    for artifact in _request_artifacts(request):
         if not artifact["path"].startswith(input_prefix):
             issues.append(
                 "semantic /request/params: "
@@ -235,6 +229,26 @@ def _artifact_ownership_issues(
             issues.append(
                 f"semantic /response/artifacts/{index}/path: outside outputs_dir"
             )
+    return issues
+
+
+def _workspace_issues(request: dict[str, Any]) -> list[str]:
+    roots = request["workspace"]
+    fields = ("inputs_dir", "outputs_dir", "control_dir")
+    issues: list[str] = []
+    for left_index, left_field in enumerate(fields):
+        left = roots[left_field]
+        for right_field in fields[left_index + 1 :]:
+            right = roots[right_field]
+            if (
+                left == right
+                or left.startswith(f"{right}/")
+                or right.startswith(f"{left}/")
+            ):
+                issues.append(
+                    "semantic /request/workspace: "
+                    f"{left_field} and {right_field} must be disjoint roots"
+                )
     return issues
 
 
@@ -416,6 +430,7 @@ def _exchange_semantic_issues(
             )
 
     issues.extend(correlation_issues)
+    issues.extend(_workspace_issues(request))
     issues.extend(_artifact_ownership_issues(request, response))
     issues.extend(_request_artifact_kind_issues(request))
     issues.extend(_duplicate_id_issues(response["artifacts"], "/response/artifacts"))
