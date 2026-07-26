@@ -10,9 +10,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-EXPECTED_DEPENDENCIES = {
+EXPECTED_DIRECT_DEPENDENCIES = {
     "zkperf-adapter-protocol": set(),
-    "zkperf-core": {"zkperf-adapter-protocol"},
+    "zkperf-core": {
+        "chrono",
+        "semver",
+        "serde",
+        "serde_json",
+        "uriparse",
+        "uuid",
+        "zkperf-adapter-protocol",
+    },
     "zkperf-cli": {"zkperf-core"},
 }
 
@@ -55,6 +63,26 @@ def capture(command: list[str]) -> str:
     return result.stdout
 
 
+def verify_package_dependencies(packages: dict[str, dict[str, object]]) -> None:
+    """Enforce the workspace's complete direct-dependency allowlist."""
+    if set(packages) != set(EXPECTED_DIRECT_DEPENDENCIES):
+        raise SystemExit(
+            "workspace members changed; update the documented dependency policy "
+            "and this check deliberately"
+        )
+
+    for package_name, expected in EXPECTED_DIRECT_DEPENDENCIES.items():
+        dependencies = {
+            dependency["name"]
+            for dependency in packages[package_name]["dependencies"]
+        }
+        if dependencies != expected:
+            raise SystemExit(
+                f"{package_name} dependencies must be {sorted(expected)}, "
+                f"found {sorted(dependencies)}"
+            )
+
+
 def verify_dependency_boundaries(cargo: str) -> None:
     """Keep engine SDKs outside the CLI and core dependency graphs."""
     print("\n==> Workspace dependency boundaries", flush=True)
@@ -67,25 +95,7 @@ def verify_dependency_boundaries(cargo: str) -> None:
         for package in metadata["packages"]
         if package["id"] in workspace_ids
     }
-
-    if set(packages) != set(EXPECTED_DEPENDENCIES):
-        raise SystemExit(
-            "workspace members changed; update the documented dependency policy "
-            "and this check deliberately"
-        )
-
-    workspace_package_names = set(packages)
-    for package_name, expected in EXPECTED_DEPENDENCIES.items():
-        dependencies = {
-            dependency["name"]
-            for dependency in packages[package_name]["dependencies"]
-            if dependency["name"] in workspace_package_names
-        }
-        if dependencies != expected:
-            raise SystemExit(
-                f"{package_name} dependencies must be {sorted(expected)}, "
-                f"found {sorted(dependencies)}"
-            )
+    verify_package_dependencies(packages)
 
 
 def main() -> int:
