@@ -6,14 +6,15 @@ use zkperf_core::{
     Architecture, BenchmarkJob, BenchmarkMetadata, BenchmarkMetadataParts, BenchmarkReportV1,
     BenchmarkReportV1Parts, BuildCacheState, ByteSize, CanonicalInput, CanonicalInputParts,
     ClockMetadata, Commitment, CommitmentPolicy, CompatibilityMetadata, CompilerMetadata,
-    Concurrency, ConcurrencyMode, CpuMetadata, EngineMetadata, EngineMetadataParts,
-    EnvironmentMetadata, EnvironmentMetadataParts, ExecutionMode, GuestMetadata,
-    GuestMetadataParts, HostMetadata, HostMetadataParts, ImplementationLane, InputVisibility,
-    Lifecycle, LifecycleParts, LifecycleProfile, Measurement, MeasurementError, NonEmptyString,
-    OperatingSystemMetadata, PercentileMethod, Phase, ProofMetadata, ProofMetadataParts, Reason,
-    ReportStatus, ResourceLimit, Resources, ResourcesParts, RunMetadata, RunMetadataParts,
-    RunPolicy, RunPolicyParts, ScalarMeasurement, SemanticVersion, SetupCacheState, Sha256Digest,
-    Slug, StandardPhase, SuiteMetadata, SuiteMetadataParts, Timestamp, ToolMetadata,
+    Concurrency, ConcurrencyMode, Correctness, CpuMetadata, DurationOutcome, EngineMetadata,
+    EngineMetadataParts, EnvironmentMetadata, EnvironmentMetadataParts, ExecutionMode,
+    FailedProofCorrectness, GuestMetadata, GuestMetadataParts, HostMetadata, HostMetadataParts,
+    ImplementationLane, InputVisibility, Lifecycle, LifecycleParts, LifecycleProfile, Measurement,
+    MeasurementError, Nanoseconds, NonEmptyString, OperatingSystemMetadata, PercentileMethod,
+    Phase, ProofCorrectness, ProofMetadata, ProofMetadataParts, Reason, ReportStatus,
+    ResourceLimit, Resources, ResourcesParts, RunMetadata, RunMetadataParts, RunPolicy,
+    RunPolicyParts, ScalarMeasurement, SemanticVersion, SetupCacheState, Sha256Digest, Slug,
+    StandardPhase, SuiteMetadata, SuiteMetadataParts, Timestamp, Timing, ToolMetadata,
     WorkloadMetadata,
 };
 
@@ -199,4 +200,35 @@ fn proof_size_constructor_rejects_missing_phase() {
         Measurement::proof_size(measurement),
         Err(MeasurementError::MissingProofSizePhase)
     ));
+}
+
+#[test]
+fn external_producer_builds_accepted_and_rejected_proof_evidence() {
+    let accepted = DurationOutcome::Success {
+        timing: Timing::new(Nanoseconds::new(10), Nanoseconds::new(20)).unwrap(),
+        correctness: Some(Correctness::AcceptedProof(ProofCorrectness::new(
+            digest('d'),
+            Some(digest('1')),
+            Some(digest('2')),
+        ))),
+    };
+    let rejected = DurationOutcome::Failed {
+        error_code: slug("verification_failed"),
+        reason: Reason::new(slug("verification_failed"), text("proof was rejected")),
+        diagnostic_timing: None,
+        correctness: Some(Correctness::RejectedProof(FailedProofCorrectness::new(
+            Some(digest('d')),
+            Some(digest('1')),
+            Some(digest('2')),
+        ))),
+    };
+
+    assert_eq!(
+        serde_json::to_value(accepted).unwrap()["correctness"]["verification_verdict"],
+        "accepted"
+    );
+    assert_eq!(
+        serde_json::to_value(rejected).unwrap()["correctness"]["verification_verdict"],
+        "rejected"
+    );
 }

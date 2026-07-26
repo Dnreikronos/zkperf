@@ -103,6 +103,22 @@ pub struct ProofCorrectness {
     verification_verdict: VerificationVerdict,
 }
 
+impl ProofCorrectness {
+    #[must_use]
+    pub const fn new(
+        output_digest: Sha256Digest,
+        input_commitment_digest: Option<Sha256Digest>,
+        output_commitment_digest: Option<Sha256Digest>,
+    ) -> Self {
+        Self {
+            output_digest,
+            input_commitment_digest,
+            output_commitment_digest,
+            verification_verdict: VerificationVerdict::Accepted,
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for ProofCorrectness {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -143,6 +159,22 @@ pub struct FailedProofCorrectness {
     #[serde(skip_serializing_if = "Option::is_none")]
     output_commitment_digest: Option<Sha256Digest>,
     verification_verdict: VerificationVerdict,
+}
+
+impl FailedProofCorrectness {
+    #[must_use]
+    pub const fn new(
+        output_digest: Option<Sha256Digest>,
+        input_commitment_digest: Option<Sha256Digest>,
+        output_commitment_digest: Option<Sha256Digest>,
+    ) -> Self {
+        Self {
+            output_digest,
+            input_commitment_digest,
+            output_commitment_digest,
+            verification_verdict: VerificationVerdict::Rejected,
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for FailedProofCorrectness {
