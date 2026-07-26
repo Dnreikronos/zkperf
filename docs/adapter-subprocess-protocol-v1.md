@@ -412,6 +412,13 @@ Capabilities describe what an adapter implementation can do, not whether a
 particular engine configuration is currently installed. Missing dependencies
 belong in `metadata` or the affected operation as a structured error.
 
+After capability negotiation, every response MUST respect the advertised
+artifact limits. The number of response artifacts MUST NOT exceed
+`max_artifact_count`; each declared `byte_length` MUST NOT exceed
+`max_artifact_bytes`; and their sum MUST NOT exceed
+`max_total_artifact_bytes`. Filesystem validation later confirms that the
+declared lengths match the materialized files.
+
 Each boundary maps one adapter invocation to either one standard fairness
 phase or the smallest observable ordered combination. For example, an engine
 that cannot separate execution and proving advertises:

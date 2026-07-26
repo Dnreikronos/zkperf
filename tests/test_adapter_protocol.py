@@ -683,6 +683,49 @@ class AdapterProtocolTests(unittest.TestCase):
             with self.subTest(capability_field=field):
                 self.assertInvalid(response)
 
+    def test_advertised_artifact_limits_constrain_responses(self) -> None:
+        cases = (
+            ("max_artifact_count", 1, "count exceeds advertised limit"),
+            ("max_artifact_bytes", 1, "byte_length: exceeds advertised limit"),
+            (
+                "max_total_artifact_bytes",
+                1,
+                "total byte length exceeds advertised limit",
+            ),
+        )
+        for field, value, expected in cases:
+            catalog = copy.deepcopy(self.examples)
+            limits = catalog["exchanges"][0]["response"]["result"]["limits"]
+            limits[field] = value
+            with self.subTest(limit=field):
+                self.assertTrue(
+                    any(
+                        expected in issue
+                        for issue in validate_catalog(catalog, self.schema)
+                    )
+                )
+
+    def test_artifact_limits_activate_after_capability_exchange(self) -> None:
+        catalog = copy.deepcopy(self.examples)
+        capability_exchange = catalog["exchanges"][0]
+        catalog["exchanges"] = [capability_exchange]
+        catalog["cancellation"]["request_id"] = capability_exchange["request"][
+            "request_id"
+        ]
+
+        artifact = copy.deepcopy(
+            self.exchange("prepare_build")["response"]["artifacts"][0]
+        )
+        artifact["id"] = "capability-artifact"
+        artifact["path"] = "outputs/capability-artifact.bin"
+        capability_exchange["response"]["artifacts"].append(artifact)
+        limits = capability_exchange["response"]["result"]["limits"]
+        limits["max_artifact_count"] = 0
+        limits["max_artifact_bytes"] = 0
+        limits["max_total_artifact_bytes"] = 0
+
+        self.assertEqual([], validate_catalog(catalog, self.schema))
+
     def test_canonical_artifact_fields_require_semantic_kinds(self) -> None:
         wrong_execute_input = copy.deepcopy(self.exchange("execute")["request"])
         wrong_execute_input["params"]["canonical_input"]["kind"] = "proof"

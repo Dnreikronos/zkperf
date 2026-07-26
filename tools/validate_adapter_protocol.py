@@ -536,6 +536,41 @@ def _exchange_capability_issues(
     return issues
 
 
+def _artifact_limit_issues(
+    exchanges: list[dict[str, Any]],
+    limits: dict[str, int],
+    first_limited_exchange: int,
+) -> list[str]:
+    issues: list[str] = []
+    for exchange_index in range(first_limited_exchange, len(exchanges)):
+        exchange = exchanges[exchange_index]
+        artifacts = exchange["response"]["artifacts"]
+        if len(artifacts) > limits["max_artifact_count"]:
+            issues.append(
+                f"semantic /exchanges/{exchange_index}/response/artifacts: "
+                f"count exceeds advertised limit {limits['max_artifact_count']}"
+            )
+
+        total_bytes = 0
+        for artifact_index, artifact in enumerate(artifacts):
+            byte_length = artifact["byte_length"]
+            total_bytes += byte_length
+            if byte_length > limits["max_artifact_bytes"]:
+                issues.append(
+                    f"semantic /exchanges/{exchange_index}/response/artifacts/"
+                    f"{artifact_index}/byte_length: exceeds advertised limit "
+                    f"{limits['max_artifact_bytes']}"
+                )
+
+        if total_bytes > limits["max_total_artifact_bytes"]:
+            issues.append(
+                f"semantic /exchanges/{exchange_index}/response/artifacts: "
+                f"total byte length exceeds advertised limit "
+                f"{limits['max_total_artifact_bytes']}"
+            )
+    return issues
+
+
 def _catalog_semantic_issues(catalog: dict[str, Any]) -> list[str]:
     exchanges = catalog["exchanges"]
     issues: list[str] = []
@@ -572,8 +607,8 @@ def _catalog_semantic_issues(catalog: dict[str, Any]) -> list[str]:
         )
 
     capability_exchanges = [
-        exchange
-        for exchange in exchanges
+        (index, exchange)
+        for index, exchange in enumerate(exchanges)
         if exchange["request"]["operation"] == "capabilities"
         and exchange["response"]["operation"] == "capabilities"
         and exchange["response"]["status"] == "success"
@@ -582,7 +617,7 @@ def _catalog_semantic_issues(catalog: dict[str, Any]) -> list[str]:
         issues.append("semantic /exchanges: successful capabilities exchange missing")
         return issues
 
-    capability_exchange = capability_exchanges[0]
+    capability_exchange_index, capability_exchange = capability_exchanges[0]
     capabilities = capability_exchange["response"]["result"]
     selected_version = capability_exchange["request"]["protocol_version"]
     host_versions = capability_exchange["request"]["params"]["host"][
@@ -636,6 +671,13 @@ def _catalog_semantic_issues(catalog: dict[str, Any]) -> list[str]:
 
     issues.extend(_capability_issues(capabilities))
     issues.extend(_exchange_capability_issues(exchanges, capabilities))
+    issues.extend(
+        _artifact_limit_issues(
+            exchanges,
+            capabilities["limits"],
+            capability_exchange_index + 1,
+        )
+    )
     return issues
 
 
