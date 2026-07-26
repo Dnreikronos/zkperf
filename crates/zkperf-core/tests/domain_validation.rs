@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use serde_json::{Value, json};
-use zkperf_core::{BenchmarkReport, RunMetadata};
+use zkperf_core::{BenchmarkReport, Count, Ratio, RunMetadata, SummaryValue, UnitInterval};
 
 const SUCCESSFUL: &str = include_str!("../../../examples/reports/successful.json");
 const FAILED: &str = include_str!("../../../examples/reports/failed.json");
@@ -75,6 +75,20 @@ fn rejects_integer_summaries_with_tolerance_sized_errors() {
             "accepted {incorrect_summary} for exact observation {observation}"
         );
     }
+}
+
+#[test]
+fn rejects_decimal_bounds_before_f64_rounding() {
+    assert!(serde_json::from_str::<Ratio>("-1e-400").is_err());
+    assert!(serde_json::from_str::<Ratio>("1.00000000000000001").is_err());
+    assert!(serde_json::from_str::<SummaryValue<Count>>("-1e-400").is_err());
+    assert!(serde_json::from_str::<UnitInterval>("-1e-400").is_err());
+    assert!(serde_json::from_str::<UnitInterval>("1.00000000000000001").is_err());
+
+    let mut report = successful_report();
+    report["measurements"][0]["statistics"]["rates"]["failure"] =
+        serde_json::from_str("-1e-400").unwrap();
+    assert!(rejects(report));
 }
 
 #[test]

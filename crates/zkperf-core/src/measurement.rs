@@ -9,6 +9,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Number, Value};
 
 use crate::metadata::BenchmarkMetadata;
+use crate::types::{number_is_nonnegative, number_is_unit_interval};
 use crate::{
     AttemptId, ByteSize, Count, DurationObservation, Nanoseconds, NonEmptyString, Phase, Reason,
     SampleStatus, ScalarObservation,
@@ -194,16 +195,15 @@ impl Ratio {
     /// Returns [`MeasurementError::InvalidStatistics`] for a value outside
     /// the unit interval.
     pub fn new(value: Number) -> Result<Self, MeasurementError> {
-        let numeric = value
+        if !number_is_unit_interval(&value) {
+            return Err(MeasurementError::InvalidStatistics(
+                "ratio must be between zero and one",
+            ));
+        }
+        value
             .as_f64()
             .ok_or(MeasurementError::InvalidStatistics("ratio is not finite"))?;
-        if (0.0..=1.0).contains(&numeric) {
-            Ok(Self(value))
-        } else {
-            Err(MeasurementError::InvalidStatistics(
-                "ratio must be between zero and one",
-            ))
-        }
+        Ok(Self(value))
     }
 
     /// Returns the validated ratio as an `f64`.
@@ -265,19 +265,18 @@ impl<Q> SummaryValue<Q> {
     /// Returns [`MeasurementError::InvalidStatistics`] when `value` is
     /// negative.
     pub fn new(value: Number) -> Result<Self, MeasurementError> {
-        let numeric = value.as_f64().ok_or(MeasurementError::InvalidStatistics(
+        if !number_is_nonnegative(&value) {
+            return Err(MeasurementError::InvalidStatistics(
+                "summary value must be non-negative",
+            ));
+        }
+        value.as_f64().ok_or(MeasurementError::InvalidStatistics(
             "summary value is not finite",
         ))?;
-        if numeric < 0.0 {
-            Err(MeasurementError::InvalidStatistics(
-                "summary value must be non-negative",
-            ))
-        } else {
-            Ok(Self {
-                value,
-                quantity: PhantomData,
-            })
-        }
+        Ok(Self {
+            value,
+            quantity: PhantomData,
+        })
     }
 
     /// Returns the validated summary value as an `f64`.

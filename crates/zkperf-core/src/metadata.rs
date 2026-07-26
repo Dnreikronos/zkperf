@@ -8,6 +8,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Number, Value};
 use uriparse::{URI, URIReference};
 
+use crate::types::number_is_unit_interval;
 use crate::{ByteSize, Nanoseconds, NonEmptyString, Slug, Timestamp};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -864,10 +865,7 @@ impl UnitInterval {
     /// Returns [`MetadataError::InvalidUnitInterval`] for values outside the
     /// inclusive unit interval.
     pub fn new(value: Number) -> Result<Self, MetadataError> {
-        if value
-            .as_f64()
-            .is_some_and(|numeric| (0.0..=1.0).contains(&numeric))
-        {
+        if number_is_unit_interval(&value) && value.as_f64().is_some() {
             Ok(Self(value))
         } else {
             Err(MetadataError::InvalidUnitInterval)

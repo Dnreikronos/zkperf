@@ -7,7 +7,104 @@ use chrono::{DateTime, FixedOffset};
 use semver::Version;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Number;
 use uuid::Uuid;
+
+#[derive(Eq, PartialEq)]
+struct ExactDecimal {
+    negative: bool,
+    digits: String,
+    exponent: i64,
+}
+
+impl ExactDecimal {
+    fn from_number(value: &Number) -> Self {
+        let encoded = value.to_string();
+        let (negative, unsigned) = encoded
+            .strip_prefix('-')
+            .map_or((false, encoded.as_str()), |unsigned| (true, unsigned));
+        let (significand, exponent) = unsigned.find(['e', 'E']).map_or((unsigned, 0), |index| {
+            (
+                &unsigned[..index],
+                parse_decimal_exponent(&unsigned[index + 1..]),
+            )
+        });
+        let fractional_digits = significand
+            .split_once('.')
+            .map_or(0, |(_, fraction)| fraction.len());
+        let exponent =
+            exponent.saturating_sub(i64::try_from(fractional_digits).unwrap_or(i64::MAX));
+        let digits = significand.replace('.', "");
+        Self::normalize(negative, &digits, exponent)
+    }
+
+    fn normalize(negative: bool, digits: &str, exponent: i64) -> Self {
+        let Some(first_nonzero) = digits.bytes().position(|digit| digit != b'0') else {
+            return Self::zero();
+        };
+        let trailing_zeros = digits
+            .bytes()
+            .rev()
+            .take_while(|digit| *digit == b'0')
+            .count();
+        let end = digits.len() - trailing_zeros;
+        Self {
+            negative,
+            digits: digits[first_nonzero..end].to_owned(),
+            exponent: exponent.saturating_add(i64::try_from(trailing_zeros).unwrap_or(i64::MAX)),
+        }
+    }
+
+    fn zero() -> Self {
+        Self {
+            negative: false,
+            digits: String::new(),
+            exponent: 0,
+        }
+    }
+
+    fn is_zero(&self) -> bool {
+        self.digits.is_empty()
+    }
+
+    fn is_at_most_one(&self) -> bool {
+        if self.negative {
+            return false;
+        }
+        if self.is_zero() {
+            return true;
+        }
+        let order =
+            i128::try_from(self.digits.len()).unwrap_or(i128::MAX) + i128::from(self.exponent);
+        order < 1 || (order == 1 && self.digits == "1" && self.exponent == 0)
+    }
+}
+
+fn parse_decimal_exponent(value: &str) -> i64 {
+    let (negative, digits) = value
+        .strip_prefix('-')
+        .map_or((false, value), |digits| (true, digits));
+    let digits = digits.strip_prefix('+').unwrap_or(digits);
+    let magnitude = digits.bytes().fold(0_i64, |magnitude, digit| {
+        magnitude
+            .saturating_mul(10)
+            .saturating_add(i64::from(digit - b'0'))
+    });
+    if negative {
+        magnitude.saturating_neg()
+    } else {
+        magnitude
+    }
+}
+
+pub(crate) fn number_is_nonnegative(value: &Number) -> bool {
+    let decimal = ExactDecimal::from_number(value);
+    !decimal.negative || decimal.is_zero()
+}
+
+pub(crate) fn number_is_unit_interval(value: &Number) -> bool {
+    ExactDecimal::from_number(value).is_at_most_one()
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
