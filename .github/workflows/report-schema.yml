@@ -1,4 +1,4 @@
-name: BenchmarkReport schema
+name: Contract conformance
 
 on:
   pull_request:
@@ -19,10 +19,10 @@ jobs:
           - "3.10"
           - "3.12"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -33,3 +33,5 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Validate example reports
         run: python tools/validate_benchmark_reports.py examples/reports/*.json
+      - name: Validate adapter protocol examples
+        run: python tools/validate_adapter_protocol.py examples/protocol-v1.json

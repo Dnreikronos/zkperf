@@ -1,0 +1,62 @@
+name: Rust quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality:
+    name: Complete quality gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --version 0.22.2 --locked
+      - name: Run complete quality gate
+        run: python tools/check.py
+
+  platforms:
+    name: Test (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-24.04
+          - macos-15
+          - windows-2025
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Run Rust tests
+        run: cargo test --workspace --all-features --locked
+
+  msrv:
+    name: Check MSRV (Rust 1.85)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install MSRV
+        run: rustup toolchain install 1.85.0 --profile minimal
+      - name: Check workspace
+        run: cargo +1.85.0 check --workspace --all-targets --locked
