@@ -1014,8 +1014,18 @@ class AdapterProtocolTests(unittest.TestCase):
         boundaries = duplicate["exchanges"][0]["response"]["result"][
             "measurement_boundaries"
         ]
-        boundaries.append(copy.deepcopy(boundaries[0]))
-        self.assertTrue(validate_catalog(duplicate, self.schema))
+        duplicate_boundary = copy.deepcopy(boundaries[0])
+        duplicate_boundary["phase"] = {
+            "kind": "combined",
+            "components": ["build", "setup"],
+        }
+        boundaries.append(duplicate_boundary)
+        self.assertTrue(
+            any(
+                "duplicate boundary for prepare/build" in issue
+                for issue in validate_catalog(duplicate, self.schema)
+            )
+        )
 
     def test_capabilities_must_be_first_and_request_ids_unique(self) -> None:
         late = copy.deepcopy(self.examples)
