@@ -78,6 +78,27 @@ fn rejects_integer_summaries_with_tolerance_sized_errors() {
 }
 
 #[test]
+fn accepts_non_terminating_mean() {
+    let mut report = successful_report();
+    for (sample, value) in report["measurements"][1]["samples"].as_array_mut().unwrap()[1..]
+        .iter_mut()
+        .zip([0_u64, 0, 1])
+    {
+        sample["value"] = Value::from(value);
+    }
+    let statistics = &mut report["measurements"][1]["statistics"];
+    statistics["minimum"] = Value::from(0);
+    statistics["maximum"] = Value::from(1);
+    statistics["median"] = Value::from(0);
+    statistics["mean"] = Value::from(1.0 / 3.0);
+    statistics["standard_deviation"] = Value::from((1.0_f64 / 3.0).sqrt());
+    statistics["percentiles"]["p50"] = Value::from(0);
+    statistics["percentiles"]["p95"] = Value::from(0.9);
+
+    assert!(!rejects(report));
+}
+
+#[test]
 fn rejects_decimal_bounds_before_f64_rounding() {
     assert!(serde_json::from_str::<Ratio>("-1e-400").is_err());
     assert!(serde_json::from_str::<Ratio>("1.00000000000000001").is_err());
