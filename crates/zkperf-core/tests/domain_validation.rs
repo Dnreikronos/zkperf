@@ -109,6 +109,16 @@ fn rejects_disconnected_schedule_and_attempt_graph() {
         Value::from(99);
     assert!(rejects(unknown_schedule_position));
 
+    let mut duplicate_sample_schedule_position = successful_report();
+    for measurement in duplicate_sample_schedule_position["measurements"]
+        .as_array_mut()
+        .unwrap()
+    {
+        measurement["samples"][2]["schedule_position"] = Value::from(1);
+        measurement["samples"][2]["attempt_index"] = Value::from(1);
+    }
+    assert!(rejects(duplicate_sample_schedule_position));
+
     let mut duplicate_sample_id = successful_report();
     let existing_id = duplicate_sample_id["measurements"][0]["samples"][1]["id"].clone();
     duplicate_sample_id["measurements"][1]["samples"][1]["id"] = existing_id;

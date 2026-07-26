@@ -54,6 +54,7 @@ pub(super) fn validate_report(parts: &BenchmarkReportV1Parts) -> Result<(), Repo
 
         let observations = measurement.observations();
         let mut measurement_attempts = HashSet::new();
+        let mut measurement_schedule_positions = HashSet::new();
         for (sample_index, observation) in observations.iter().copied().enumerate() {
             let sample_path = format!("/measurements/{measurement_index}/samples/{sample_index}");
             if !sample_ids.insert(observation.identity.id()) {
@@ -62,6 +63,11 @@ pub(super) fn validate_report(parts: &BenchmarkReportV1Parts) -> Result<(), Repo
             if !measurement_attempts.insert(observation.identity.attempt_id()) {
                 return invalid(format!(
                     "{sample_path}/attempt_id: duplicate attempt in measurement"
+                ));
+            }
+            if !measurement_schedule_positions.insert(observation.identity.schedule_position()) {
+                return invalid(format!(
+                    "{sample_path}/schedule_position: duplicate schedule position in measurement"
                 ));
             }
 
