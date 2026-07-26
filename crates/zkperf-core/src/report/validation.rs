@@ -557,15 +557,28 @@ fn validate_replacements(
         let Some(target_id) = signature.replacement_attempt_id else {
             continue;
         };
-        let Some(target) = attempts.get(&target_id) else {
-            return invalid(format!(
-                "attempt {attempt_id}: replacement target does not exist"
-            ));
-        };
-        if target.status != SampleStatus::Invalid {
-            return invalid(format!(
-                "attempt {attempt_id}: replacement target is not invalid"
-            ));
+        let mut lineage = HashSet::from([*attempt_id]);
+        let mut current_id = target_id;
+        loop {
+            if !lineage.insert(current_id) {
+                return invalid(format!(
+                    "attempt {attempt_id}: replacement lineage contains a cycle"
+                ));
+            }
+            let Some(target) = attempts.get(&current_id) else {
+                return invalid(format!(
+                    "attempt {attempt_id}: replacement target does not exist"
+                ));
+            };
+            if target.status != SampleStatus::Invalid {
+                return invalid(format!(
+                    "attempt {attempt_id}: replacement target is not invalid"
+                ));
+            }
+            let Some(parent_id) = target.replacement_attempt_id else {
+                break;
+            };
+            current_id = parent_id;
         }
     }
     Ok(())

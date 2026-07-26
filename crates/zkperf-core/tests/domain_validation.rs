@@ -111,6 +111,65 @@ fn rejects_disconnected_schedule_and_attempt_graph() {
 }
 
 #[test]
+fn rejects_replacement_self_references() {
+    let mut report = successful_report();
+    invalidate_attempt(&mut report, 0, Some(0));
+    assert!(rejects(report));
+}
+
+#[test]
+fn rejects_replacement_cycles() {
+    let mut report = successful_report();
+    invalidate_attempt(&mut report, 0, Some(1));
+    invalidate_attempt(&mut report, 1, Some(0));
+    report["measurements"][0]["policy"]["measured_trial_count"] = Value::from(2);
+
+    set_remaining_sample_statistics(&mut report);
+
+    assert!(rejects(report));
+}
+
+#[test]
+fn accepts_replacement_lineage_terminating_at_original_attempt() {
+    let mut report = successful_report();
+    invalidate_attempt(&mut report, 0, None);
+    invalidate_attempt(&mut report, 1, Some(0));
+    set_replacement_target(&mut report, 2, 1);
+    report["measurements"][0]["policy"]["measured_trial_count"] = Value::from(1);
+
+    set_remaining_sample_statistics(&mut report);
+
+    assert!(!rejects(report));
+}
+
+fn set_remaining_sample_statistics(report: &mut Value) {
+    set_two_sample_statistics(
+        &mut report["measurements"][0]["statistics"],
+        &json!({
+            "minimum": 90_000,
+            "maximum": 110_000,
+            "median": 100_000,
+            "mean": 100_000,
+            "standard_deviation": 14_142.135_623_730_95,
+            "p50": 100_000,
+            "p95": 109_000
+        }),
+    );
+    set_two_sample_statistics(
+        &mut report["measurements"][1]["statistics"],
+        &json!({
+            "minimum": 992,
+            "maximum": 1_008,
+            "median": 1_000,
+            "mean": 1_000,
+            "standard_deviation": 11.313_708_498_984_761,
+            "p50": 1_000,
+            "p95": 1_007.2
+        }),
+    );
+}
+
+#[test]
 fn rejects_unknown_sample_properties() {
     let mut report = successful_report();
     report["measurements"][0]["samples"][0]["unknown"] = Value::Bool(true);
@@ -208,6 +267,64 @@ fn rejects_every_published_negative_fixture() {
         }
         assert!(rejects(report), "negative fixture accepted: {}", case.name);
     }
+}
+
+fn invalidate_attempt(report: &mut Value, sample_index: usize, target_index: Option<usize>) {
+    let target_id =
+        target_index.map(|index| report["measurements"][0]["samples"][index]["attempt_id"].clone());
+    for measurement in report["measurements"].as_array_mut().unwrap() {
+        let sample = measurement["samples"][sample_index]
+            .as_object_mut()
+            .unwrap();
+        sample.insert("status".to_owned(), Value::String("invalid".to_owned()));
+        sample.insert(
+            "reason".to_owned(),
+            json!({
+                "code": "invalid_attempt",
+                "message": "Harness interference invalidated this attempt."
+            }),
+        );
+        if let Some(target_id) = &target_id {
+            sample.insert("replacement_attempt_id".to_owned(), target_id.clone());
+        } else {
+            sample.remove("replacement_attempt_id");
+        }
+        for field in ["timing", "correctness", "value"] {
+            sample.remove(field);
+        }
+
+        let statistics = &mut measurement["statistics"];
+        statistics["status_counts"]["success"] =
+            Value::from(4_u64.saturating_sub(sample_index as u64 + 1));
+        statistics["status_counts"]["invalid"] = Value::from(sample_index as u64 + 1);
+    }
+    report["status"] = json!({
+        "outcome": "invalid",
+        "reason": {
+            "code": "invalid_attempt",
+            "message": "One or more attempts were invalid."
+        }
+    });
+}
+
+fn set_replacement_target(report: &mut Value, sample_index: usize, target_index: usize) {
+    let target_id = report["measurements"][0]["samples"][target_index]["attempt_id"].clone();
+    for measurement in report["measurements"].as_array_mut().unwrap() {
+        measurement["samples"][sample_index]["replacement_attempt_id"] = target_id.clone();
+    }
+}
+
+fn set_two_sample_statistics(statistics: &mut Value, summaries: &Value) {
+    statistics["sample_count"] = Value::from(2);
+    for field in ["minimum", "maximum", "median", "mean", "standard_deviation"] {
+        statistics[field] = summaries[field].clone();
+    }
+    statistics["percentiles"]["p50"] = summaries["p50"].clone();
+    statistics["percentiles"]["p95"] = summaries["p95"].clone();
+    statistics["included_attempt_ids"] = json!([
+        "20000000-0000-4000-8000-000000000003",
+        "20000000-0000-4000-8000-000000000004"
+    ]);
 }
 
 fn apply_patch(document: &mut Value, operation: PatchOperation) {
