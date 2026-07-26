@@ -1,0 +1,2020 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Dnreikronos/zkperf/blob/main/schemas/adapter-protocol-v1.schema.json",
+  "title": "zkperf Adapter Subprocess Protocol v1",
+  "description": "Discovery manifest and request/response messages for zkperf engine adapters.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/adapterManifest"
+    },
+    {
+      "$ref": "#/$defs/requestEnvelope"
+    },
+    {
+      "$ref": "#/$defs/responseEnvelope"
+    },
+    {
+      "$ref": "#/$defs/cancellationNotice"
+    }
+  ],
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$"
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!.*//)(?!.*(?:^|/)(?:\\.{1,2})(?:/|$))(?!.*\\\\)(?!.*\\u0000)(?!.*\\/$).+$"
+    },
+    "mediaType": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$"
+    },
+    "sha256": {
+      "type": "object",
+      "required": [
+        "algorithm",
+        "value"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "value": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "reason": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/identifier"
+        },
+        "message": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9]+(?:[.-][a-z0-9_]+)+$"
+      },
+      "additionalProperties": true
+    },
+    "adapterManifest": {
+      "type": "object",
+      "required": [
+        "kind",
+        "manifest_version",
+        "adapter_id",
+        "display_name",
+        "command",
+        "protocol_versions"
+      ],
+      "properties": {
+        "kind": {
+          "const": "zkperf-adapter-manifest"
+        },
+        "manifest_version": {
+          "const": "1.0.0"
+        },
+        "adapter_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "display_name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/nonEmptyString"
+          }
+        },
+        "protocol_versions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/semver"
+          }
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "workspace": {
+      "type": "object",
+      "required": [
+        "inputs_dir",
+        "outputs_dir",
+        "control_dir"
+      ],
+      "properties": {
+        "inputs_dir": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "outputs_dir": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "control_dir": {
+          "$ref": "#/$defs/relativePath"
+        }
+      },
+      "additionalProperties": false
+    },
+    "timeout": {
+      "type": "object",
+      "required": [
+        "limit_ns",
+        "termination_grace_ns"
+      ],
+      "properties": {
+        "limit_ns": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "termination_grace_ns": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "cancellationNotice": {
+      "type": "object",
+      "required": [
+        "protocol",
+        "protocol_version",
+        "request_id",
+        "reason"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "zkperf-adapter"
+        },
+        "protocol_version": {
+          "const": "1.0.0"
+        },
+        "request_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "reason": {
+          "enum": [
+            "user_cancelled",
+            "deadline_exceeded",
+            "supervisor_shutdown"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "artifact": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "path",
+        "media_type",
+        "byte_length",
+        "digest"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "enum": [
+            "source",
+            "canonical_input",
+            "canonical_output",
+            "guest_program",
+            "prepared_state",
+            "execution_trace",
+            "proof",
+            "public_values",
+            "proving_key",
+            "verification_key",
+            "parameters",
+            "profile",
+            "other"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "media_type": {
+          "$ref": "#/$defs/mediaType"
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "benchmark": {
+      "type": "object",
+      "required": [
+        "case_id",
+        "workload_revision",
+        "workload_digest",
+        "implementation_lane",
+        "security_target_bits",
+        "expected_output_digest",
+        "commitment_policy"
+      ],
+      "properties": {
+        "case_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "workload_revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "workload_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "implementation_lane": {
+          "enum": [
+            "portable",
+            "optimized"
+          ]
+        },
+        "security_target_bits": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expected_output_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "commitment_policy": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": true
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cache": {
+      "type": "object",
+      "required": [
+        "state"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "cold",
+            "warm",
+            "incremental"
+          ]
+        },
+        "reuse_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "hostIdentity": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "supported_protocol_versions"
+      ],
+      "properties": {
+        "name": {
+          "const": "zkperf"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        },
+        "supported_protocol_versions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/semver"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "capabilitiesParams": {
+      "type": "object",
+      "required": [
+        "host"
+      ],
+      "properties": {
+        "host": {
+          "$ref": "#/$defs/hostIdentity"
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadataParams": {
+      "type": "object",
+      "required": [
+        "configuration",
+        "artifacts"
+      ],
+      "properties": {
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "prepareParams": {
+      "type": "object",
+      "required": [
+        "stage",
+        "benchmark",
+        "configuration",
+        "input_artifacts"
+      ],
+      "properties": {
+        "stage": {
+          "enum": [
+            "environment",
+            "build",
+            "setup"
+          ]
+        },
+        "benchmark": {
+          "$ref": "#/$defs/benchmark"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "input_artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        },
+        "cache": {
+          "$ref": "#/$defs/cache"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "stage": {
+                "enum": [
+                  "build",
+                  "setup"
+                ]
+              }
+            },
+            "required": [
+              "stage"
+            ]
+          },
+          "then": {
+            "required": [
+              "cache"
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "executeParams": {
+      "type": "object",
+      "required": [
+        "benchmark",
+        "configuration",
+        "canonical_input",
+        "prepared_artifacts"
+      ],
+      "properties": {
+        "benchmark": {
+          "$ref": "#/$defs/benchmark"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "canonical_input": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/artifact"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "canonical_input"
+                }
+              }
+            }
+          ]
+        },
+        "prepared_artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        },
+        "proof_mode_id": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "additionalProperties": false
+    },
+    "proveParams": {
+      "type": "object",
+      "required": [
+        "stage",
+        "benchmark",
+        "configuration",
+        "proof_mode_id",
+        "input_artifacts"
+      ],
+      "properties": {
+        "stage": {
+          "enum": [
+            "initial",
+            "transform"
+          ]
+        },
+        "benchmark": {
+          "$ref": "#/$defs/benchmark"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "proof_mode_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "transformation_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "input_artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "stage": {
+                "const": "transform"
+              }
+            },
+            "required": [
+              "stage"
+            ]
+          },
+          "then": {
+            "required": [
+              "transformation_id"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "transformation_id"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "stage": {
+                "const": "initial"
+              }
+            },
+            "required": [
+              "stage"
+            ]
+          },
+          "then": {
+            "properties": {
+              "input_artifacts": {
+                "contains": {
+                  "type": "object",
+                  "required": [
+                    "kind"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "execution_trace"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "input_artifacts": {
+                "contains": {
+                  "type": "object",
+                  "required": [
+                    "kind"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "proof"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "verifyParams": {
+      "type": "object",
+      "required": [
+        "benchmark",
+        "configuration",
+        "proof_mode_id",
+        "proof",
+        "statement",
+        "expected_output_digest",
+        "expected_commitment_digests"
+      ],
+      "properties": {
+        "benchmark": {
+          "$ref": "#/$defs/benchmark"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "proof_mode_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "proof": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/artifact"
+            },
+            {
+              "properties": {
+                "kind": {
+                  "const": "proof"
+                }
+              }
+            }
+          ]
+        },
+        "statement": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": true
+        },
+        "expected_output_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "expected_commitment_digests": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "requestEnvelope": {
+      "type": "object",
+      "required": [
+        "protocol",
+        "protocol_version",
+        "request_id",
+        "operation",
+        "workspace",
+        "timeout",
+        "params"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "zkperf-adapter"
+        },
+        "protocol_version": {
+          "const": "1.0.0"
+        },
+        "request_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "operation": {
+          "enum": [
+            "capabilities",
+            "metadata",
+            "prepare",
+            "execute",
+            "prove",
+            "verify"
+          ]
+        },
+        "workspace": {
+          "$ref": "#/$defs/workspace"
+        },
+        "timeout": {
+          "$ref": "#/$defs/timeout"
+        },
+        "params": {
+          "type": "object"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "capabilities"
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/capabilitiesParams"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "metadata"
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/metadataParams"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "prepare"
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/prepareParams"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "execute"
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/executeParams"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "prove"
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/proveParams"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "verify"
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "$ref": "#/$defs/verifyParams"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "operationCapability": {
+      "type": "object",
+      "required": [
+        "supported"
+      ],
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "supported": {
+                "const": false
+              }
+            },
+            "required": [
+              "supported"
+            ]
+          },
+          "then": {
+            "required": [
+              "reason"
+            ]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "prepareCapability": {
+      "type": "object",
+      "required": [
+        "supported"
+      ],
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "stages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "environment",
+              "build",
+              "setup"
+            ]
+          }
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "supported": {
+                "const": true
+              }
+            },
+            "required": [
+              "supported"
+            ]
+          },
+          "then": {
+            "required": [
+              "stages"
+            ]
+          },
+          "else": {
+            "required": [
+              "reason"
+            ],
+            "not": {
+              "required": [
+                "stages"
+              ]
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "proveCapability": {
+      "type": "object",
+      "required": [
+        "supported"
+      ],
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "stages": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "initial",
+              "transform"
+            ]
+          }
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "supported": {
+                "const": true
+              }
+            },
+            "required": [
+              "supported"
+            ]
+          },
+          "then": {
+            "required": [
+              "stages"
+            ]
+          },
+          "else": {
+            "required": [
+              "reason"
+            ],
+            "not": {
+              "required": [
+                "stages"
+              ]
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "buildPhase": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "const": "standard"
+        },
+        "name": {
+          "const": "build"
+        }
+      },
+      "additionalProperties": false
+    },
+    "setupPhase": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "const": "standard"
+        },
+        "name": {
+          "const": "setup"
+        }
+      },
+      "additionalProperties": false
+    },
+    "executionPhase": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "const": "standard"
+        },
+        "name": {
+          "const": "execution"
+        }
+      },
+      "additionalProperties": false
+    },
+    "provingPhase": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "const": "standard"
+        },
+        "name": {
+          "const": "proving"
+        }
+      },
+      "additionalProperties": false
+    },
+    "compressionPhase": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "const": "standard"
+        },
+        "name": {
+          "const": "compression"
+        }
+      },
+      "additionalProperties": false
+    },
+    "verificationPhase": {
+      "type": "object",
+      "required": [
+        "kind",
+        "name"
+      ],
+      "properties": {
+        "kind": {
+          "const": "standard"
+        },
+        "name": {
+          "const": "verification"
+        }
+      },
+      "additionalProperties": false
+    },
+    "buildSetupPhase": {
+      "type": "object",
+      "required": [
+        "kind",
+        "components"
+      ],
+      "properties": {
+        "kind": {
+          "const": "combined"
+        },
+        "components": {
+          "const": [
+            "build",
+            "setup"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "executionProvingPhase": {
+      "type": "object",
+      "required": [
+        "kind",
+        "components"
+      ],
+      "properties": {
+        "kind": {
+          "const": "combined"
+        },
+        "components": {
+          "const": [
+            "execution",
+            "proving"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "measurementBoundary": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "operation",
+            "stage",
+            "phase"
+          ],
+          "properties": {
+            "operation": {
+              "const": "prepare"
+            },
+            "stage": {
+              "const": "build"
+            },
+            "phase": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/buildPhase"
+                },
+                {
+                  "$ref": "#/$defs/buildSetupPhase"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "operation",
+            "stage",
+            "phase"
+          ],
+          "properties": {
+            "operation": {
+              "const": "prepare"
+            },
+            "stage": {
+              "const": "setup"
+            },
+            "phase": {
+              "$ref": "#/$defs/setupPhase"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "operation",
+            "phase"
+          ],
+          "properties": {
+            "operation": {
+              "const": "execute"
+            },
+            "phase": {
+              "$ref": "#/$defs/executionPhase"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "operation",
+            "stage",
+            "phase"
+          ],
+          "properties": {
+            "operation": {
+              "const": "prove"
+            },
+            "stage": {
+              "const": "initial"
+            },
+            "phase": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/provingPhase"
+                },
+                {
+                  "$ref": "#/$defs/executionProvingPhase"
+                }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "operation",
+            "stage",
+            "phase"
+          ],
+          "properties": {
+            "operation": {
+              "const": "prove"
+            },
+            "stage": {
+              "const": "transform"
+            },
+            "phase": {
+              "$ref": "#/$defs/compressionPhase"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "operation",
+            "phase"
+          ],
+          "properties": {
+            "operation": {
+              "const": "verify"
+            },
+            "phase": {
+              "$ref": "#/$defs/verificationPhase"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "proofTransformation": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "output_format"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "kind": {
+          "enum": [
+            "recursion",
+            "wrapping",
+            "aggregation",
+            "compression"
+          ]
+        },
+        "output_format": {
+          "$ref": "#/$defs/mediaType"
+        }
+      },
+      "additionalProperties": false
+    },
+    "proofMode": {
+      "type": "object",
+      "required": [
+        "id",
+        "display_name",
+        "proof_format",
+        "proof_system",
+        "backend",
+        "features",
+        "transformations",
+        "verifier"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "display_name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "proof_format": {
+          "$ref": "#/$defs/mediaType"
+        },
+        "proof_system": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "backend": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "features": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "recursion",
+              "wrapping",
+              "aggregation",
+              "compression",
+              "remote_proving"
+            ]
+          }
+        },
+        "transformations": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/proofTransformation"
+          }
+        },
+        "verifier": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cancellationCapability": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "graceful",
+            "mechanism"
+          ],
+          "properties": {
+            "graceful": {
+              "const": true
+            },
+            "mechanism": {
+              "const": "control_file"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "graceful",
+            "mechanism"
+          ],
+          "properties": {
+            "graceful": {
+              "const": false
+            },
+            "mechanism": {
+              "const": "none"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "limits": {
+      "type": "object",
+      "required": [
+        "max_protocol_stdout_bytes",
+        "max_artifact_count",
+        "max_artifact_bytes",
+        "max_total_artifact_bytes"
+      ],
+      "properties": {
+        "max_protocol_stdout_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_artifact_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_artifact_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_total_artifact_bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "adapterIdentity": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "version",
+        "revision"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "version": {
+          "$ref": "#/$defs/semver"
+        },
+        "revision": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "capabilitiesResult": {
+      "type": "object",
+      "required": [
+        "adapter",
+        "supported_protocol_versions",
+        "operations",
+        "measurement_boundaries",
+        "proof_modes",
+        "cancellation",
+        "limits"
+      ],
+      "properties": {
+        "adapter": {
+          "$ref": "#/$defs/adapterIdentity"
+        },
+        "supported_protocol_versions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/semver"
+          }
+        },
+        "operations": {
+          "type": "object",
+          "required": [
+            "capabilities",
+            "metadata",
+            "prepare",
+            "execute",
+            "prove",
+            "verify"
+          ],
+          "properties": {
+            "capabilities": {
+              "$ref": "#/$defs/operationCapability"
+            },
+            "metadata": {
+              "$ref": "#/$defs/operationCapability"
+            },
+            "prepare": {
+              "$ref": "#/$defs/prepareCapability"
+            },
+            "execute": {
+              "$ref": "#/$defs/operationCapability"
+            },
+            "prove": {
+              "$ref": "#/$defs/proveCapability"
+            },
+            "verify": {
+              "$ref": "#/$defs/operationCapability"
+            }
+          },
+          "additionalProperties": false
+        },
+        "measurement_boundaries": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/measurementBoundary"
+          }
+        },
+        "proof_modes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/proofMode"
+          }
+        },
+        "cancellation": {
+          "$ref": "#/$defs/cancellationCapability"
+        },
+        "limits": {
+          "$ref": "#/$defs/limits"
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operations": {
+                "properties": {
+                  "prove": {
+                    "properties": {
+                      "supported": {
+                        "const": true
+                      }
+                    },
+                    "required": [
+                      "supported"
+                    ]
+                  }
+                },
+                "required": [
+                  "prove"
+                ]
+              }
+            },
+            "required": [
+              "operations"
+            ]
+          },
+          "then": {
+            "properties": {
+              "proof_modes": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "availableComponent": {
+      "type": "object",
+      "required": [
+        "status",
+        "name",
+        "version"
+      ],
+      "properties": {
+        "status": {
+          "const": "available"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "version": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "unavailableComponent": {
+      "type": "object",
+      "required": [
+        "status",
+        "reason"
+      ],
+      "properties": {
+        "status": {
+          "const": "unavailable"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        }
+      },
+      "additionalProperties": false
+    },
+    "componentMetadata": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/availableComponent"
+        },
+        {
+          "$ref": "#/$defs/unavailableComponent"
+        }
+      ]
+    },
+    "engineIdentity": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "version": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadataResult": {
+      "type": "object",
+      "required": [
+        "adapter",
+        "engine",
+        "sdk",
+        "toolchain",
+        "proof_system",
+        "backend",
+        "verifier",
+        "configuration"
+      ],
+      "properties": {
+        "adapter": {
+          "$ref": "#/$defs/adapterIdentity"
+        },
+        "engine": {
+          "$ref": "#/$defs/engineIdentity"
+        },
+        "sdk": {
+          "$ref": "#/$defs/componentMetadata"
+        },
+        "toolchain": {
+          "$ref": "#/$defs/componentMetadata"
+        },
+        "proof_system": {
+          "$ref": "#/$defs/componentMetadata"
+        },
+        "backend": {
+          "$ref": "#/$defs/componentMetadata"
+        },
+        "verifier": {
+          "$ref": "#/$defs/componentMetadata"
+        },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "additionalProperties": false
+    },
+    "prepareResult": {
+      "type": "object",
+      "required": [
+        "stage",
+        "prepared_artifact_ids",
+        "observations"
+      ],
+      "properties": {
+        "stage": {
+          "enum": [
+            "environment",
+            "build",
+            "setup"
+          ]
+        },
+        "prepared_artifact_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "observations": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "executeResult": {
+      "type": "object",
+      "required": [
+        "canonical_output_artifact_id",
+        "execution_artifact_id",
+        "commitment_digests",
+        "observations"
+      ],
+      "properties": {
+        "canonical_output_artifact_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "execution_artifact_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "commitment_digests": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/sha256"
+          }
+        },
+        "observations": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "proveResult": {
+      "type": "object",
+      "required": [
+        "stage",
+        "proof_mode_id",
+        "proof_artifact_id",
+        "commitment_digests",
+        "observations"
+      ],
+      "properties": {
+        "stage": {
+          "enum": [
+            "initial",
+            "transform"
+          ]
+        },
+        "proof_mode_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "transformation_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "proof_artifact_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "public_values_artifact_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "commitment_digests": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/sha256"
+          }
+        },
+        "observations": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "stage": {
+                "const": "transform"
+              }
+            },
+            "required": [
+              "stage"
+            ]
+          },
+          "then": {
+            "required": [
+              "transformation_id"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "transformation_id"
+              ]
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "verifyResult": {
+      "type": "object",
+      "required": [
+        "verdict",
+        "output_digest",
+        "commitment_digests"
+      ],
+      "properties": {
+        "verdict": {
+          "const": "accepted"
+        },
+        "output_digest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "commitment_digests": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "failure": {
+      "type": "object",
+      "required": [
+        "phase",
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "phase": {
+          "enum": [
+            "protocol",
+            "capabilities",
+            "metadata",
+            "preparation",
+            "build",
+            "setup",
+            "execution",
+            "proving",
+            "compression",
+            "verification",
+            "artifact",
+            "cleanup"
+          ]
+        },
+        "code": {
+          "$ref": "#/$defs/identifier"
+        },
+        "message": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "responseEnvelope": {
+      "type": "object",
+      "required": [
+        "protocol",
+        "protocol_version",
+        "request_id",
+        "operation",
+        "status",
+        "artifacts"
+      ],
+      "properties": {
+        "protocol": {
+          "const": "zkperf-adapter"
+        },
+        "protocol_version": {
+          "const": "1.0.0"
+        },
+        "request_id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "operation": {
+          "enum": [
+            "capabilities",
+            "metadata",
+            "prepare",
+            "execute",
+            "prove",
+            "verify"
+          ]
+        },
+        "status": {
+          "enum": [
+            "success",
+            "unsupported",
+            "error"
+          ]
+        },
+        "result": {
+          "type": "object"
+        },
+        "error": {
+          "$ref": "#/$defs/failure"
+        },
+        "artifacts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/artifact"
+          }
+        },
+        "extensions": {
+          "$ref": "#/$defs/extensions"
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "status": {
+                  "const": "success"
+                }
+              },
+              "required": [
+                "result"
+              ],
+              "not": {
+                "required": [
+                  "error"
+                ]
+              }
+            },
+            {
+              "properties": {
+                "status": {
+                  "enum": [
+                    "unsupported",
+                    "error"
+                  ]
+                }
+              },
+              "required": [
+                "error"
+              ],
+              "not": {
+                "required": [
+                  "result"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "capabilities"
+              },
+              "status": {
+                "const": "success"
+              }
+            },
+            "required": [
+              "operation",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/capabilitiesResult"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "metadata"
+              },
+              "status": {
+                "const": "success"
+              }
+            },
+            "required": [
+              "operation",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/metadataResult"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "prepare"
+              },
+              "status": {
+                "const": "success"
+              }
+            },
+            "required": [
+              "operation",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/prepareResult"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "execute"
+              },
+              "status": {
+                "const": "success"
+              }
+            },
+            "required": [
+              "operation",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/executeResult"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "prove"
+              },
+              "status": {
+                "const": "success"
+              }
+            },
+            "required": [
+              "operation",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/proveResult"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operation": {
+                "const": "verify"
+              },
+              "status": {
+                "const": "success"
+              }
+            },
+            "required": [
+              "operation",
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "$ref": "#/$defs/verifyResult"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  }
+}
