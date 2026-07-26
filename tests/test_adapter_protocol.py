@@ -726,6 +726,30 @@ class AdapterProtocolTests(unittest.TestCase):
 
         self.assertEqual([], validate_catalog(catalog, self.schema))
 
+    def test_metadata_adapter_identity_matches_capabilities(self) -> None:
+        replacements = {
+            "id": "different-adapter",
+            "name": "Different adapter",
+            "version": "9.9.9",
+            "revision": "different-revision",
+        }
+        for field, value in replacements.items():
+            catalog = copy.deepcopy(self.examples)
+            metadata = next(
+                exchange
+                for exchange in catalog["exchanges"]
+                if exchange["name"] == "metadata"
+            )
+            metadata["response"]["result"]["adapter"][field] = value
+            with self.subTest(field=field):
+                self.assertTrue(
+                    any(
+                        "/response/result/adapter: "
+                        "does not match runtime capabilities" in issue
+                        for issue in validate_catalog(catalog, self.schema)
+                    )
+                )
+
     def test_canonical_artifact_fields_require_semantic_kinds(self) -> None:
         wrong_execute_input = copy.deepcopy(self.exchange("execute")["request"])
         wrong_execute_input["params"]["canonical_input"]["kind"] = "proof"

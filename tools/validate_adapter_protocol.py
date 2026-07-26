@@ -571,6 +571,27 @@ def _artifact_limit_issues(
     return issues
 
 
+def _metadata_identity_issues(
+    exchanges: list[dict[str, Any]],
+    adapter: dict[str, Any],
+) -> list[str]:
+    issues: list[str] = []
+    for index, exchange in enumerate(exchanges):
+        request = exchange["request"]
+        response = exchange["response"]
+        if (
+            request["operation"] == "metadata"
+            and response["operation"] == "metadata"
+            and response["status"] == "success"
+            and response["result"]["adapter"] != adapter
+        ):
+            issues.append(
+                f"semantic /exchanges/{index}/response/result/adapter: "
+                "does not match runtime capabilities"
+            )
+    return issues
+
+
 def _catalog_semantic_issues(catalog: dict[str, Any]) -> list[str]:
     exchanges = catalog["exchanges"]
     issues: list[str] = []
@@ -677,6 +698,9 @@ def _catalog_semantic_issues(catalog: dict[str, Any]) -> list[str]:
             capabilities["limits"],
             capability_exchange_index + 1,
         )
+    )
+    issues.extend(
+        _metadata_identity_issues(exchanges, capabilities["adapter"])
     )
     return issues
 

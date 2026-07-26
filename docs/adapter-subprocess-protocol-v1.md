@@ -465,6 +465,9 @@ toolchain, proof system, backend, verifier, and engine configuration. The
 request MAY include prepared artifacts when metadata is available only after
 build or setup.
 
+The metadata `adapter` object MUST exactly match the adapter identity returned
+by `capabilities`. Its `id` therefore also matches the selected manifest.
+
 The returned `configuration` is non-secret JSON. Unknown engine-specific
 metadata belongs in a namespaced `extensions` object. Metadata MUST describe
 the resolved runtime, not merely repeat requested values.
