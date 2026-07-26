@@ -1,0 +1,968 @@
+{
+  "manifest": {
+    "kind": "zkperf-adapter-manifest",
+    "manifest_version": "1.0.0",
+    "adapter_id": "mock",
+    "display_name": "zkperf deterministic mock adapter",
+    "command": [
+      "./bin/zkperf-adapter-mock"
+    ],
+    "protocol_versions": [
+      "1.0.0"
+    ]
+  },
+  "cancellation": {
+    "protocol": "zkperf-adapter",
+    "protocol_version": "1.0.0",
+    "request_id": "10000000-0000-4000-8000-000000000010",
+    "reason": "user_cancelled"
+  },
+  "exchanges": [
+    {
+      "name": "capabilities",
+      "request": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000001",
+        "operation": "capabilities",
+        "workspace": {
+          "inputs_dir": "inputs",
+          "outputs_dir": "outputs",
+          "control_dir": "control"
+        },
+        "timeout": {
+          "limit_ns": 30000000000,
+          "termination_grace_ns": 1000000000
+        },
+        "params": {
+          "host": {
+            "name": "zkperf",
+            "version": "0.1.0",
+            "supported_protocol_versions": [
+              "1.0.0"
+            ]
+          }
+        }
+      },
+      "response": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000001",
+        "operation": "capabilities",
+        "status": "success",
+        "result": {
+          "adapter": {
+            "id": "mock",
+            "name": "zkperf deterministic mock adapter",
+            "version": "1.0.0",
+            "revision": "mock-adapter-v1"
+          },
+          "supported_protocol_versions": [
+            "1.0.0"
+          ],
+          "operations": {
+            "capabilities": {
+              "supported": true
+            },
+            "metadata": {
+              "supported": true
+            },
+            "prepare": {
+              "supported": true,
+              "stages": [
+                "environment",
+                "build",
+                "setup"
+              ]
+            },
+            "execute": {
+              "supported": true
+            },
+            "prove": {
+              "supported": true,
+              "stages": [
+                "initial",
+                "transform"
+              ]
+            },
+            "verify": {
+              "supported": true
+            }
+          },
+          "measurement_boundaries": [
+            {
+              "operation": "prepare",
+              "stage": "build",
+              "phase": {
+                "kind": "standard",
+                "name": "build"
+              }
+            },
+            {
+              "operation": "prepare",
+              "stage": "setup",
+              "phase": {
+                "kind": "standard",
+                "name": "setup"
+              }
+            },
+            {
+              "operation": "execute",
+              "phase": {
+                "kind": "standard",
+                "name": "execution"
+              }
+            },
+            {
+              "operation": "prove",
+              "stage": "initial",
+              "phase": {
+                "kind": "standard",
+                "name": "proving"
+              }
+            },
+            {
+              "operation": "prove",
+              "stage": "transform",
+              "phase": {
+                "kind": "standard",
+                "name": "compression"
+              }
+            },
+            {
+              "operation": "verify",
+              "phase": {
+                "kind": "standard",
+                "name": "verification"
+              }
+            }
+          ],
+          "proof_modes": [
+            {
+              "id": "mock-core",
+              "display_name": "Mock core proof with compressed wrapper",
+              "proof_format": "application/vnd.zkperf.mock-proof",
+              "proof_system": "deterministic-hash-proof",
+              "backend": "local-cpu",
+              "features": [
+                "compression"
+              ],
+              "transformations": [
+                {
+                  "id": "mock-compress",
+                  "kind": "compression",
+                  "output_format": "application/vnd.zkperf.mock-proof+compressed"
+                }
+              ],
+              "verifier": "mock-verifier-v1"
+            }
+          ],
+          "cancellation": {
+            "graceful": true,
+            "mechanism": "control_file"
+          },
+          "limits": {
+            "max_protocol_stdout_bytes": 1048576,
+            "max_artifact_count": 32,
+            "max_artifact_bytes": 1073741824,
+            "max_total_artifact_bytes": 2147483648
+          }
+        },
+        "artifacts": []
+      }
+    },
+    {
+      "name": "metadata",
+      "request": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000002",
+        "operation": "metadata",
+        "workspace": {
+          "inputs_dir": "inputs",
+          "outputs_dir": "outputs",
+          "control_dir": "control"
+        },
+        "timeout": {
+          "limit_ns": 30000000000,
+          "termination_grace_ns": 1000000000
+        },
+        "params": {
+          "configuration": {
+            "backend": "local-cpu",
+            "proof_mode": "mock-core"
+          },
+          "artifacts": []
+        }
+      },
+      "response": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000002",
+        "operation": "metadata",
+        "status": "success",
+        "result": {
+          "adapter": {
+            "id": "mock",
+            "name": "zkperf deterministic mock adapter",
+            "version": "1.0.0",
+            "revision": "mock-adapter-v1"
+          },
+          "engine": {
+            "id": "mock-engine",
+            "name": "zkperf mock engine",
+            "version": "1.0.0"
+          },
+          "sdk": {
+            "status": "available",
+            "name": "mock-sdk",
+            "version": "1.0.0"
+          },
+          "toolchain": {
+            "status": "available",
+            "name": "python",
+            "version": "3.10"
+          },
+          "proof_system": {
+            "status": "available",
+            "name": "deterministic-hash-proof",
+            "version": "1"
+          },
+          "backend": {
+            "status": "available",
+            "name": "local-cpu",
+            "version": "1"
+          },
+          "verifier": {
+            "status": "available",
+            "name": "mock-verifier",
+            "version": "1"
+          },
+          "configuration": {
+            "backend": "local-cpu",
+            "proof_mode": "mock-core",
+            "worker_count": 1
+          }
+        },
+        "artifacts": []
+      }
+    },
+    {
+      "name": "prepare_build",
+      "request": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000003",
+        "operation": "prepare",
+        "workspace": {
+          "inputs_dir": "inputs",
+          "outputs_dir": "outputs",
+          "control_dir": "control"
+        },
+        "timeout": {
+          "limit_ns": 120000000000,
+          "termination_grace_ns": 2000000000
+        },
+        "params": {
+          "stage": "build",
+          "benchmark": {
+            "case_id": "sha256-1k",
+            "workload_revision": "fixture-v1",
+            "workload_digest": {
+              "algorithm": "sha256",
+              "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "implementation_lane": "portable",
+            "security_target_bits": 100,
+            "expected_output_digest": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "commitment_policy": {
+              "input": true,
+              "output": true
+            }
+          },
+          "configuration": {
+            "backend": "local-cpu"
+          },
+          "input_artifacts": [
+            {
+              "id": "guest-source",
+              "kind": "source",
+              "path": "inputs/guest-source.tar",
+              "media_type": "application/x-tar",
+              "byte_length": 4096,
+              "digest": {
+                "algorithm": "sha256",
+                "value": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              }
+            }
+          ],
+          "cache": {
+            "state": "cold"
+          }
+        }
+      },
+      "response": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000003",
+        "operation": "prepare",
+        "status": "success",
+        "result": {
+          "stage": "build",
+          "prepared_artifact_ids": [
+            "guest-program"
+          ],
+          "observations": {
+            "compiler_exit_code": 0
+          }
+        },
+        "artifacts": [
+          {
+            "id": "guest-program",
+            "kind": "guest_program",
+            "path": "outputs/guest-program.bin",
+            "media_type": "application/octet-stream",
+            "byte_length": 8192,
+            "digest": {
+              "algorithm": "sha256",
+              "value": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "execute",
+      "request": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000004",
+        "operation": "execute",
+        "workspace": {
+          "inputs_dir": "inputs",
+          "outputs_dir": "outputs",
+          "control_dir": "control"
+        },
+        "timeout": {
+          "limit_ns": 60000000000,
+          "termination_grace_ns": 1000000000
+        },
+        "params": {
+          "benchmark": {
+            "case_id": "sha256-1k",
+            "workload_revision": "fixture-v1",
+            "workload_digest": {
+              "algorithm": "sha256",
+              "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "implementation_lane": "portable",
+            "security_target_bits": 100,
+            "expected_output_digest": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "commitment_policy": {
+              "input": true,
+              "output": true
+            }
+          },
+          "configuration": {
+            "backend": "local-cpu"
+          },
+          "canonical_input": {
+            "id": "canonical-input",
+            "kind": "canonical_input",
+            "path": "inputs/canonical-input.bin",
+            "media_type": "application/octet-stream",
+            "byte_length": 1024,
+            "digest": {
+              "algorithm": "sha256",
+              "value": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            }
+          },
+          "prepared_artifacts": [
+            {
+              "id": "guest-program",
+              "kind": "guest_program",
+              "path": "inputs/guest-program.bin",
+              "media_type": "application/octet-stream",
+              "byte_length": 8192,
+              "digest": {
+                "algorithm": "sha256",
+                "value": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+              }
+            }
+          ],
+          "proof_mode_id": "mock-core"
+        }
+      },
+      "response": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000004",
+        "operation": "execute",
+        "status": "success",
+        "result": {
+          "canonical_output_artifact_id": "canonical-output",
+          "execution_artifact_id": "execution-trace",
+          "commitment_digests": {
+            "input": {
+              "algorithm": "sha256",
+              "value": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            },
+            "output": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          },
+          "observations": {
+            "cycle_count": 16384
+          }
+        },
+        "artifacts": [
+          {
+            "id": "canonical-output",
+            "kind": "canonical_output",
+            "path": "outputs/canonical-output.bin",
+            "media_type": "application/octet-stream",
+            "byte_length": 32,
+            "digest": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          },
+          {
+            "id": "execution-trace",
+            "kind": "execution_trace",
+            "path": "outputs/execution-trace.bin",
+            "media_type": "application/octet-stream",
+            "byte_length": 65536,
+            "digest": {
+              "algorithm": "sha256",
+              "value": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "prove_initial",
+      "request": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000005",
+        "operation": "prove",
+        "workspace": {
+          "inputs_dir": "inputs",
+          "outputs_dir": "outputs",
+          "control_dir": "control"
+        },
+        "timeout": {
+          "limit_ns": 300000000000,
+          "termination_grace_ns": 5000000000
+        },
+        "params": {
+          "stage": "initial",
+          "benchmark": {
+            "case_id": "sha256-1k",
+            "workload_revision": "fixture-v1",
+            "workload_digest": {
+              "algorithm": "sha256",
+              "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "implementation_lane": "portable",
+            "security_target_bits": 100,
+            "expected_output_digest": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "commitment_policy": {
+              "input": true,
+              "output": true
+            }
+          },
+          "configuration": {
+            "backend": "local-cpu"
+          },
+          "proof_mode_id": "mock-core",
+          "input_artifacts": [
+            {
+              "id": "execution-trace",
+              "kind": "execution_trace",
+              "path": "inputs/execution-trace.bin",
+              "media_type": "application/octet-stream",
+              "byte_length": 65536,
+              "digest": {
+                "algorithm": "sha256",
+                "value": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000005",
+        "operation": "prove",
+        "status": "success",
+        "result": {
+          "stage": "initial",
+          "proof_mode_id": "mock-core",
+          "proof_artifact_id": "raw-proof",
+          "public_values_artifact_id": "public-values",
+          "commitment_digests": {
+            "input": {
+              "algorithm": "sha256",
+              "value": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            },
+            "output": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          },
+          "observations": {
+            "constraint_count": 32768
+          }
+        },
+        "artifacts": [
+          {
+            "id": "raw-proof",
+            "kind": "proof",
+            "path": "outputs/raw-proof.bin",
+            "media_type": "application/vnd.zkperf.mock-proof",
+            "byte_length": 4096,
+            "digest": {
+              "algorithm": "sha256",
+              "value": "1111111111111111111111111111111111111111111111111111111111111111"
+            }
+          },
+          {
+            "id": "public-values",
+            "kind": "public_values",
+            "path": "outputs/public-values.bin",
+            "media_type": "application/octet-stream",
+            "byte_length": 64,
+            "digest": {
+              "algorithm": "sha256",
+              "value": "2222222222222222222222222222222222222222222222222222222222222222"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "prove_transform",
+      "request": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000006",
+        "operation": "prove",
+        "workspace": {
+          "inputs_dir": "inputs",
+          "outputs_dir": "outputs",
+          "control_dir": "control"
+        },
+        "timeout": {
+          "limit_ns": 180000000000,
+          "termination_grace_ns": 5000000000
+        },
+        "params": {
+          "stage": "transform",
+          "benchmark": {
+            "case_id": "sha256-1k",
+            "workload_revision": "fixture-v1",
+            "workload_digest": {
+              "algorithm": "sha256",
+              "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "implementation_lane": "portable",
+            "security_target_bits": 100,
+            "expected_output_digest": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "commitment_policy": {
+              "input": true,
+              "output": true
+            }
+          },
+          "configuration": {
+            "backend": "local-cpu"
+          },
+          "proof_mode_id": "mock-core",
+          "transformation_id": "mock-compress",
+          "input_artifacts": [
+            {
+              "id": "raw-proof",
+              "kind": "proof",
+              "path": "inputs/raw-proof.bin",
+              "media_type": "application/vnd.zkperf.mock-proof",
+              "byte_length": 4096,
+              "digest": {
+                "algorithm": "sha256",
+                "value": "1111111111111111111111111111111111111111111111111111111111111111"
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000006",
+        "operation": "prove",
+        "status": "success",
+        "result": {
+          "stage": "transform",
+          "proof_mode_id": "mock-core",
+          "transformation_id": "mock-compress",
+          "proof_artifact_id": "compressed-proof",
+          "commitment_digests": {
+            "input": {
+              "algorithm": "sha256",
+              "value": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            },
+            "output": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          },
+          "observations": {}
+        },
+        "artifacts": [
+          {
+            "id": "compressed-proof",
+            "kind": "proof",
+            "path": "outputs/compressed-proof.bin",
+            "media_type": "application/vnd.zkperf.mock-proof+compressed",
+            "byte_length": 1024,
+            "digest": {
+              "algorithm": "sha256",
+              "value": "3333333333333333333333333333333333333333333333333333333333333333"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "verify",
+      "request": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000007",
+        "operation": "verify",
+        "workspace": {
+          "inputs_dir": "inputs",
+          "outputs_dir": "outputs",
+          "control_dir": "control"
+        },
+        "timeout": {
+          "limit_ns": 60000000000,
+          "termination_grace_ns": 1000000000
+        },
+        "params": {
+          "benchmark": {
+            "case_id": "sha256-1k",
+            "workload_revision": "fixture-v1",
+            "workload_digest": {
+              "algorithm": "sha256",
+              "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "implementation_lane": "portable",
+            "security_target_bits": 100,
+            "expected_output_digest": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "commitment_policy": {
+              "input": true,
+              "output": true
+            }
+          },
+          "configuration": {
+            "backend": "local-cpu"
+          },
+          "proof_mode_id": "mock-core",
+          "proof": {
+            "id": "compressed-proof",
+            "kind": "proof",
+            "path": "inputs/compressed-proof.bin",
+            "media_type": "application/vnd.zkperf.mock-proof+compressed",
+            "byte_length": 1024,
+            "digest": {
+              "algorithm": "sha256",
+              "value": "3333333333333333333333333333333333333333333333333333333333333333"
+            }
+          },
+          "statement": {
+            "workload": "sha256-1k",
+            "input_commitment": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "output_commitment": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "expected_output_digest": {
+            "algorithm": "sha256",
+            "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "expected_commitment_digests": {
+            "input": {
+              "algorithm": "sha256",
+              "value": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            },
+            "output": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          }
+        }
+      },
+      "response": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000007",
+        "operation": "verify",
+        "status": "success",
+        "result": {
+          "verdict": "accepted",
+          "output_digest": {
+            "algorithm": "sha256",
+            "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "commitment_digests": {
+            "input": {
+              "algorithm": "sha256",
+              "value": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            },
+            "output": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+          }
+        },
+        "artifacts": []
+      }
+    },
+    {
+      "name": "unsupported_proof_mode",
+      "request": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000008",
+        "operation": "prove",
+        "workspace": {
+          "inputs_dir": "inputs",
+          "outputs_dir": "outputs",
+          "control_dir": "control"
+        },
+        "timeout": {
+          "limit_ns": 300000000000,
+          "termination_grace_ns": 5000000000
+        },
+        "params": {
+          "stage": "initial",
+          "benchmark": {
+            "case_id": "sha256-1k",
+            "workload_revision": "fixture-v1",
+            "workload_digest": {
+              "algorithm": "sha256",
+              "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "implementation_lane": "portable",
+            "security_target_bits": 100,
+            "expected_output_digest": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "commitment_policy": {
+              "input": true,
+              "output": true
+            }
+          },
+          "configuration": {
+            "backend": "gpu"
+          },
+          "proof_mode_id": "gpu-ultra",
+          "input_artifacts": [
+            {
+              "id": "execution-trace",
+              "kind": "execution_trace",
+              "path": "inputs/execution-trace.bin",
+              "media_type": "application/octet-stream",
+              "byte_length": 65536,
+              "digest": {
+                "algorithm": "sha256",
+                "value": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000008",
+        "operation": "prove",
+        "status": "unsupported",
+        "error": {
+          "phase": "proving",
+          "code": "proof_mode_unsupported",
+          "message": "Proof mode gpu-ultra is not supported.",
+          "retryable": false,
+          "details": {
+            "requested_proof_mode_id": "gpu-ultra"
+          }
+        },
+        "artifacts": []
+      }
+    },
+    {
+      "name": "proving_failure",
+      "request": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000009",
+        "operation": "prove",
+        "workspace": {
+          "inputs_dir": "inputs",
+          "outputs_dir": "outputs",
+          "control_dir": "control"
+        },
+        "timeout": {
+          "limit_ns": 300000000000,
+          "termination_grace_ns": 5000000000
+        },
+        "params": {
+          "stage": "initial",
+          "benchmark": {
+            "case_id": "sha256-1k",
+            "workload_revision": "fixture-v1",
+            "workload_digest": {
+              "algorithm": "sha256",
+              "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "implementation_lane": "portable",
+            "security_target_bits": 100,
+            "expected_output_digest": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "commitment_policy": {
+              "input": true,
+              "output": true
+            }
+          },
+          "configuration": {
+            "backend": "local-cpu",
+            "fixture_failure": "prover"
+          },
+          "proof_mode_id": "mock-core",
+          "input_artifacts": [
+            {
+              "id": "execution-trace",
+              "kind": "execution_trace",
+              "path": "inputs/execution-trace.bin",
+              "media_type": "application/octet-stream",
+              "byte_length": 65536,
+              "digest": {
+                "algorithm": "sha256",
+                "value": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000009",
+        "operation": "prove",
+        "status": "error",
+        "error": {
+          "phase": "proving",
+          "code": "engine_prover_failed",
+          "message": "The mock prover returned status 2.",
+          "retryable": false,
+          "details": {
+            "engine_status": 2
+          }
+        },
+        "artifacts": []
+      }
+    },
+    {
+      "name": "cancelled_execution",
+      "request": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000010",
+        "operation": "execute",
+        "workspace": {
+          "inputs_dir": "inputs",
+          "outputs_dir": "outputs",
+          "control_dir": "control"
+        },
+        "timeout": {
+          "limit_ns": 60000000000,
+          "termination_grace_ns": 1000000000
+        },
+        "params": {
+          "benchmark": {
+            "case_id": "sha256-1k",
+            "workload_revision": "fixture-v1",
+            "workload_digest": {
+              "algorithm": "sha256",
+              "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "implementation_lane": "portable",
+            "security_target_bits": 100,
+            "expected_output_digest": {
+              "algorithm": "sha256",
+              "value": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "commitment_policy": {
+              "input": true,
+              "output": true
+            }
+          },
+          "configuration": {
+            "backend": "local-cpu",
+            "fixture_delay_ns": 30000000000
+          },
+          "canonical_input": {
+            "id": "canonical-input",
+            "kind": "canonical_input",
+            "path": "inputs/canonical-input.bin",
+            "media_type": "application/octet-stream",
+            "byte_length": 1024,
+            "digest": {
+              "algorithm": "sha256",
+              "value": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            }
+          },
+          "prepared_artifacts": [],
+          "proof_mode_id": "mock-core"
+        }
+      },
+      "response": {
+        "protocol": "zkperf-adapter",
+        "protocol_version": "1.0.0",
+        "request_id": "10000000-0000-4000-8000-000000000010",
+        "operation": "execute",
+        "status": "error",
+        "error": {
+          "phase": "execution",
+          "code": "cancelled",
+          "message": "Execution was cancelled by the host.",
+          "retryable": false,
+          "details": {
+            "reason": "user_cancelled"
+          }
+        },
+        "artifacts": []
+      }
+    }
+  ]
+}
