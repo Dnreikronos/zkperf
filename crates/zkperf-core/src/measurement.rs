@@ -277,6 +277,11 @@ impl<Q> SummaryValue<Q> {
     pub fn as_f64(&self) -> f64 {
         self.value.as_f64().unwrap_or(f64::INFINITY)
     }
+
+    #[must_use]
+    pub(crate) const fn number(&self) -> &Number {
+        &self.value
+    }
 }
 
 impl<Q> Serialize for SummaryValue<Q> {
@@ -1127,12 +1132,12 @@ pub(crate) struct ObservationView<'a> {
 pub(crate) enum StatisticsView<'a> {
     Available {
         sample_count: u64,
-        minimum: f64,
-        maximum: f64,
-        median: f64,
-        mean: Option<f64>,
-        standard_deviation: Option<f64>,
-        percentiles: Vec<(&'a str, f64)>,
+        minimum: &'a Number,
+        maximum: &'a Number,
+        median: &'a Number,
+        mean: Option<&'a Number>,
+        standard_deviation: Option<&'a Number>,
+        percentiles: Vec<(&'a str, &'a Number)>,
         included_attempt_ids: &'a [AttemptId],
         excluded_warmup_attempt_ids: &'a [AttemptId],
         flagged_outlier_attempt_ids: &'a [AttemptId],
@@ -1200,15 +1205,15 @@ fn statistics_view<Q>(statistics: &Statistics<Q>) -> StatisticsView<'_> {
     match statistics {
         Statistics::Available(value) => StatisticsView::Available {
             sample_count: value.sample_count,
-            minimum: value.minimum.as_f64(),
-            maximum: value.maximum.as_f64(),
-            median: value.median.as_f64(),
-            mean: value.mean.as_ref().map(SummaryValue::as_f64),
-            standard_deviation: value.standard_deviation.as_ref().map(SummaryValue::as_f64),
+            minimum: value.minimum.number(),
+            maximum: value.maximum.number(),
+            median: value.median.number(),
+            mean: value.mean.as_ref().map(SummaryValue::number),
+            standard_deviation: value.standard_deviation.as_ref().map(SummaryValue::number),
             percentiles: value
                 .percentiles
                 .iter()
-                .map(|(name, value)| (name.as_str(), value.as_f64()))
+                .map(|(name, value)| (name.as_str(), value.number()))
                 .collect(),
             included_attempt_ids: &value.included_attempt_ids,
             excluded_warmup_attempt_ids: &value.excluded_warmup_attempt_ids,

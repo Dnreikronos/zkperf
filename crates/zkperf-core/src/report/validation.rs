@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use serde_json::Number;
+
 use crate::measurement::{ObservationView, StatisticsView};
 use crate::{
     AttemptId, Availability, Measurement, Metric, PercentileMethod, Reason, SampleId, SampleStatus,
@@ -319,7 +321,6 @@ fn validate_statistics_population(
                     samples_by_attempt
                         .get(attempt_id)
                         .and_then(|observation| observation.value)
-                        .map(value_as_f64)
                         .ok_or_else(|| {
                             ReportError::InvalidGraph(format!(
                                 "{path}/included_attempt_ids: unknown or valueless attempt"
@@ -378,51 +379,52 @@ fn validate_attempt_sets(
 #[allow(clippy::too_many_arguments)]
 fn validate_summary(
     path: &str,
-    values: &[f64],
-    minimum: f64,
-    maximum: f64,
-    median: f64,
-    mean: Option<f64>,
-    standard_deviation: Option<f64>,
-    percentiles: &[(&str, f64)],
+    values: &[u64],
+    minimum: &Number,
+    maximum: &Number,
+    median: &Number,
+    mean: Option<&Number>,
+    standard_deviation: Option<&Number>,
+    percentiles: &[(&str, &Number)],
     percentile_method: PercentileMethod,
 ) -> Result<(), ReportError> {
     if values.is_empty() {
         return invalid(format!("{path}: available statistics have no values"));
     }
     let mut ordered = values.to_vec();
-    ordered.sort_by(f64::total_cmp);
+    ordered.sort_unstable();
     let expected_minimum = ordered[0];
     let expected_maximum = ordered[ordered.len() - 1];
-    let expected_median = if ordered.len() % 2 == 0 {
-        f64::midpoint(ordered[ordered.len() / 2 - 1], ordered[ordered.len() / 2])
+    let expected_median_twice = if ordered.len() % 2 == 0 {
+        u128::from(ordered[ordered.len() / 2 - 1]) + u128::from(ordered[ordered.len() / 2])
     } else {
-        ordered[ordered.len() / 2]
+        u128::from(ordered[ordered.len() / 2]) * 2
     };
-    let expected_mean = ordered.iter().sum::<f64>() / count_as_f64(ordered.len());
+    let float_values: Vec<_> = ordered.iter().copied().map(value_as_f64).collect();
+    let expected_mean = float_values.iter().sum::<f64>() / count_as_f64(ordered.len());
     let expected_deviation = if ordered.len() == 1 {
         0.0
     } else {
-        let squared_error = ordered
+        let squared_error = float_values
             .iter()
             .map(|value| (value - expected_mean).powi(2))
             .sum::<f64>();
         (squared_error / count_as_f64(ordered.len() - 1)).sqrt()
     };
 
-    for (name, actual, expected) in [
-        ("minimum", minimum, expected_minimum),
-        ("maximum", maximum, expected_maximum),
-        ("median", median, expected_median),
-    ] {
-        if !float_eq(actual, expected) {
-            return invalid(format!("{path}/{name}: summary mismatch"));
-        }
+    if !number_matches_twice(minimum, u128::from(expected_minimum) * 2) {
+        return invalid(format!("{path}/minimum: summary mismatch"));
     }
-    if mean.is_some_and(|actual| !float_eq(actual, expected_mean)) {
+    if !number_matches_twice(maximum, u128::from(expected_maximum) * 2) {
+        return invalid(format!("{path}/maximum: summary mismatch"));
+    }
+    if !number_matches_twice(median, expected_median_twice) {
+        return invalid(format!("{path}/median: summary mismatch"));
+    }
+    if mean.is_some_and(|actual| !number_float_eq(actual, expected_mean)) {
         return invalid(format!("{path}/mean: summary mismatch"));
     }
-    if standard_deviation.is_some_and(|actual| !float_eq(actual, expected_deviation)) {
+    if standard_deviation.is_some_and(|actual| !number_float_eq(actual, expected_deviation)) {
         return invalid(format!("{path}/standard_deviation: summary mismatch"));
     }
     for (name, actual) in percentiles {
@@ -430,30 +432,102 @@ fn validate_summary(
             ReportError::InvalidGraph(format!("{path}/percentiles/{name}: invalid"))
         })?;
         let expected = percentile_value(&ordered, percentile / 100.0, percentile_method);
-        if !float_eq(*actual, expected) {
+        let matches = match expected {
+            ExpectedPercentile::ExactTwice(value) => number_matches_twice(actual, value),
+            ExpectedPercentile::Approximate(value) => number_float_eq(actual, value),
+        };
+        if !matches {
             return invalid(format!("{path}/percentiles/{name}: percentile mismatch"));
         }
     }
     Ok(())
 }
 
-fn percentile_value(values: &[f64], percentile: f64, method: PercentileMethod) -> f64 {
+enum ExpectedPercentile {
+    ExactTwice(u128),
+    Approximate(f64),
+}
+
+fn percentile_value(
+    values: &[u64],
+    percentile: f64,
+    method: PercentileMethod,
+) -> ExpectedPercentile {
     if method == PercentileMethod::NearestRank {
         let rank = position_as_index((percentile * count_as_f64(values.len())).ceil().max(1.0));
-        return values[(rank - 1).min(values.len() - 1)];
+        return ExpectedPercentile::ExactTwice(
+            u128::from(values[(rank - 1).min(values.len() - 1)]) * 2,
+        );
     }
     let position = percentile * count_as_f64(values.len() - 1);
     let lower = position_as_index(position.floor());
     let upper = position_as_index(position.ceil());
     match method {
-        PercentileMethod::Lower => values[lower],
-        PercentileMethod::Higher => values[upper],
-        PercentileMethod::Midpoint => f64::midpoint(values[lower], values[upper]),
-        PercentileMethod::Linear | PercentileMethod::NearestRank if lower == upper => values[lower],
+        PercentileMethod::Lower => ExpectedPercentile::ExactTwice(u128::from(values[lower]) * 2),
+        PercentileMethod::Higher => ExpectedPercentile::ExactTwice(u128::from(values[upper]) * 2),
+        PercentileMethod::Midpoint => {
+            ExpectedPercentile::ExactTwice(u128::from(values[lower]) + u128::from(values[upper]))
+        }
+        PercentileMethod::Linear | PercentileMethod::NearestRank if lower == upper => {
+            ExpectedPercentile::ExactTwice(u128::from(values[lower]) * 2)
+        }
         PercentileMethod::Linear | PercentileMethod::NearestRank => {
-            values[lower] + (values[upper] - values[lower]) * (position - count_as_f64(lower))
+            let lower_value = value_as_f64(values[lower]);
+            let upper_value = value_as_f64(values[upper]);
+            ExpectedPercentile::Approximate(
+                lower_value + (upper_value - lower_value) * (position - count_as_f64(lower)),
+            )
         }
     }
+}
+
+fn number_matches_twice(actual: &Number, expected_twice: u128) -> bool {
+    let text = actual.to_string();
+    let (significand, exponent) = match text.find(['e', 'E']) {
+        Some(index) => (&text[..index], text[index + 1..].parse::<i32>().ok()),
+        None => (text.as_str(), Some(0)),
+    };
+    let Some(exponent) = exponent else {
+        return false;
+    };
+    if significand.starts_with('-') {
+        return false;
+    }
+    let fraction_digits = significand
+        .split_once('.')
+        .map_or(0, |(_, fraction)| fraction.len());
+    let digits = significand.replace('.', "");
+    let Some(digits) = digits.parse::<u128>().ok() else {
+        return false;
+    };
+    let Some(doubled) = digits.checked_mul(2) else {
+        return false;
+    };
+    let Ok(fraction_digits) = i32::try_from(fraction_digits) else {
+        return false;
+    };
+    let Some(adjusted_exponent) = exponent.checked_sub(fraction_digits) else {
+        return false;
+    };
+    if adjusted_exponent >= 0 {
+        let Some(scale) = 10_u128.checked_pow(adjusted_exponent.unsigned_abs()) else {
+            return false;
+        };
+        doubled
+            .checked_mul(scale)
+            .is_some_and(|value| value == expected_twice)
+    } else {
+        let Some(scale) = 10_u128.checked_pow(adjusted_exponent.unsigned_abs()) else {
+            return false;
+        };
+        doubled % scale == 0 && doubled / scale == expected_twice
+    }
+}
+
+fn number_float_eq(actual: &Number, expected: f64) -> bool {
+    actual
+        .as_f64()
+        .is_some_and(|actual| float_eq(actual, expected))
 }
 
 fn count_as_u64(value: usize) -> Result<u64, ReportError> {

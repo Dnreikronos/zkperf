@@ -53,6 +53,31 @@ fn rejects_statistics_disconnected_from_observations() {
 }
 
 #[test]
+fn rejects_integer_summaries_with_tolerance_sized_errors() {
+    for (observation, incorrect_summary) in [
+        (1_000_000_000_u64, 1_000_000_001_u64),
+        (9_007_199_254_740_992_u64, 9_007_199_254_740_993_u64),
+    ] {
+        let mut report = successful_report();
+        for sample in &mut report["measurements"][1]["samples"].as_array_mut().unwrap()[1..] {
+            sample["value"] = Value::from(observation);
+        }
+        let statistics = &mut report["measurements"][1]["statistics"];
+        for field in ["minimum", "maximum", "median", "mean"] {
+            statistics[field] = Value::from(incorrect_summary);
+        }
+        statistics["standard_deviation"] = Value::from(0);
+        statistics["percentiles"]["p50"] = Value::from(incorrect_summary);
+        statistics["percentiles"]["p95"] = Value::from(incorrect_summary);
+
+        assert!(
+            rejects(report),
+            "accepted {incorrect_summary} for exact observation {observation}"
+        );
+    }
+}
+
+#[test]
 fn rejects_missing_proof_size_observation() {
     let mut report = successful_report();
     report["measurements"].as_array_mut().unwrap().remove(1);
