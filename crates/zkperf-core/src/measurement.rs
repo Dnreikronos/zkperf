@@ -206,9 +206,16 @@ impl Ratio {
         }
     }
 
+    /// Returns the validated ratio as an `f64`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the constructor-time representability invariant is violated.
     #[must_use]
     pub fn as_f64(&self) -> f64 {
-        self.0.as_f64().unwrap_or(f64::INFINITY)
+        self.0
+            .as_f64()
+            .expect("Ratio::new rejects values not representable as f64")
     }
 }
 
@@ -273,9 +280,16 @@ impl<Q> SummaryValue<Q> {
         }
     }
 
+    /// Returns the validated summary value as an `f64`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the constructor-time representability invariant is violated.
     #[must_use]
     pub fn as_f64(&self) -> f64 {
-        self.value.as_f64().unwrap_or(f64::INFINITY)
+        self.value
+            .as_f64()
+            .expect("SummaryValue::new rejects values not representable as f64")
     }
 
     #[must_use]
