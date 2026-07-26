@@ -481,6 +481,7 @@ def _exchange_capability_issues(
 
         mode_id = params.get("proof_mode_id")
         mode: dict[str, Any] | None = None
+        transformation: dict[str, Any] | None = None
         if (
             unadvertised is None
             and operation in {"execute", "prove", "verify"}
@@ -492,16 +493,46 @@ def _exchange_capability_issues(
 
         if unadvertised is None and mode is not None:
             transformation_id = params.get("transformation_id")
-            if transformation_id is not None and transformation_id not in {
-                item["id"] for item in mode["transformations"]
-            }:
-                unadvertised = f"transformation {transformation_id}"
+            if transformation_id is not None:
+                transformation = next(
+                    (
+                        item
+                        for item in mode["transformations"]
+                        if item["id"] == transformation_id
+                    ),
+                    None,
+                )
+                if transformation is None:
+                    unadvertised = f"transformation {transformation_id}"
 
         if unadvertised is not None and response["status"] != "unsupported":
             issues.append(
                 f"semantic /exchanges/{index}: unadvertised {unadvertised} "
                 "must return unsupported"
             )
+        if (
+            unadvertised is None
+            and operation == "prove"
+            and response["status"] == "success"
+            and mode is not None
+        ):
+            expected_format = mode["proof_format"]
+            format_source = f"proof mode {mode['id']}"
+            if params["stage"] == "transform" and transformation is not None:
+                expected_format = transformation["output_format"]
+                format_source = f"transformation {transformation['id']}"
+
+            proof_id = response["result"]["proof_artifact_id"]
+            for artifact_index, artifact in enumerate(response["artifacts"]):
+                if (
+                    artifact["id"] == proof_id
+                    and artifact["media_type"] != expected_format
+                ):
+                    issues.append(
+                        f"semantic /exchanges/{index}/response/artifacts/"
+                        f"{artifact_index}/media_type: proof artifact must use "
+                        f"{format_source} format {expected_format}"
+                    )
     return issues
 
 

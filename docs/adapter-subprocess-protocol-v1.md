@@ -509,6 +509,11 @@ names a `transformation_id` advertised for that mode. The result identifies
 the proof artifact, its public-values artifact when present, and its observed
 commitments.
 
+A successful initial proof artifact uses the selected proof mode's
+`proof_format` as its exact `media_type`. A successful transformed proof uses
+the selected transformation's `output_format`. Both capability fields are
+media types, not display labels.
+
 A proof mode identifier is adapter-scoped and stable for one adapter MAJOR
 version. The mode also declares its proof format, proof system, backend,
 features, and ordered transformations. zkperf compares the declared semantic

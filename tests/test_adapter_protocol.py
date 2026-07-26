@@ -643,6 +643,46 @@ class AdapterProtocolTests(unittest.TestCase):
             )
         )
 
+    def test_proof_artifact_formats_match_capabilities(self) -> None:
+        for name, expected_format in (
+            ("prove_initial", "application/vnd.zkperf.mock-proof"),
+            (
+                "prove_transform",
+                "application/vnd.zkperf.mock-proof+compressed",
+            ),
+        ):
+            catalog = copy.deepcopy(self.examples)
+            exchange = next(
+                item for item in catalog["exchanges"] if item["name"] == name
+            )
+            proof_id = exchange["response"]["result"]["proof_artifact_id"]
+            proof = next(
+                artifact
+                for artifact in exchange["response"]["artifacts"]
+                if artifact["id"] == proof_id
+            )
+            proof["media_type"] = "application/x-wrong-proof-format"
+
+            with self.subTest(exchange=name):
+                issues = validate_catalog(catalog, self.schema)
+                self.assertTrue(
+                    any(
+                        "proof artifact must use" in issue
+                        and expected_format in issue
+                        for issue in issues
+                    )
+                )
+
+        for field in ("proof_format", "output_format"):
+            response = copy.deepcopy(self.exchange("capabilities")["response"])
+            mode = response["result"]["proof_modes"][0]
+            if field == "proof_format":
+                mode[field] = "not a media type"
+            else:
+                mode["transformations"][0][field] = "not a media type"
+            with self.subTest(capability_field=field):
+                self.assertInvalid(response)
+
     def test_canonical_artifact_fields_require_semantic_kinds(self) -> None:
         wrong_execute_input = copy.deepcopy(self.exchange("execute")["request"])
         wrong_execute_input["params"]["canonical_input"]["kind"] = "proof"

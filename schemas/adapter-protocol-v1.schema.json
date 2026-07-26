@@ -1219,7 +1219,7 @@
           ]
         },
         "output_format": {
-          "$ref": "#/$defs/nonEmptyString"
+          "$ref": "#/$defs/mediaType"
         }
       },
       "additionalProperties": false
@@ -1244,7 +1244,7 @@
           "$ref": "#/$defs/nonEmptyString"
         },
         "proof_format": {
-          "$ref": "#/$defs/nonEmptyString"
+          "$ref": "#/$defs/mediaType"
         },
         "proof_system": {
           "$ref": "#/$defs/nonEmptyString"
