@@ -379,12 +379,35 @@ fn normalized_debug_redacts_environment_values() {
 
 #[test]
 fn secret_like_configuration_keys_are_rejected() {
-    let source = VALID_MANIFEST.replace("backend = \"cpu\"", "api_key = \"secret\"");
-    let temporary = TemporaryManifest::new(&source);
-    let error = BenchmarkManifest::load(temporary.path())
-        .expect_err("secret-like configuration keys should be rejected");
+    let cases = [
+        (
+            VALID_MANIFEST.replace("backend = \"cpu\"", "api_key = \"secret\""),
+            "engines[0].configuration.api_key",
+        ),
+        (
+            VALID_MANIFEST.replace("backend = \"cpu\"", "settings = { apiKey = \"secret\" }"),
+            "engines[0].configuration.settings.apiKey",
+        ),
+        (
+            VALID_MANIFEST.replace(
+                "backend = \"cpu\"",
+                "settings = [{ privateKey = \"secret\" }]",
+            ),
+            "engines[0].configuration.settings[0].privateKey",
+        ),
+        (
+            VALID_MANIFEST.replace("backend = \"cpu\"", "settings = { accesskey = \"secret\" }"),
+            "engines[0].configuration.settings.accesskey",
+        ),
+    ];
 
-    assert_eq!(error.field_path(), "engines[0].configuration.api_key");
+    for (source, expected_path) in cases {
+        let temporary = TemporaryManifest::new(&source);
+        let error = BenchmarkManifest::load(temporary.path())
+            .expect_err("secret-like configuration keys should be rejected");
+
+        assert_eq!(error.field_path(), expected_path);
+    }
 }
 
 #[cfg(windows)]

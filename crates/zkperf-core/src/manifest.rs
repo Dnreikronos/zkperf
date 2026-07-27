@@ -140,24 +140,55 @@ fn redact_secret_like_values(value: &mut Value) {
 }
 
 pub(super) fn is_secret_like_key(key: &str) -> bool {
-    let lower = key.to_ascii_lowercase();
-    let tokens: Vec<_> = lower
-        .split(|character: char| !character.is_ascii_alphanumeric())
-        .filter(|token| !token.is_empty())
-        .collect();
+    let tokens = secret_key_tokens(key);
 
     if tokens.iter().any(|token| {
         matches!(
-            *token,
+            token.as_str(),
             "secret" | "password" | "passwd" | "credential" | "credentials" | "token" | "bearer"
         )
     }) {
         return true;
     }
 
-    tokens.windows(2).any(|window| {
-        matches!(window[0], "api" | "access" | "private" | "secret") && window[1] == "key"
-    })
+    tokens.windows(2).any(secret_key_pair)
+        || tokens.iter().any(|token| {
+            ["apikey", "accesskey", "privatekey", "secretkey"].contains(&token.as_str())
+        })
+}
+
+fn secret_key_tokens(key: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    let mut previous_was_lowercase_or_digit = false;
+
+    for character in key.chars() {
+        if !character.is_ascii_alphanumeric() {
+            push_secret_key_token(&mut tokens, &mut current);
+            previous_was_lowercase_or_digit = false;
+            continue;
+        }
+
+        if character.is_ascii_uppercase() && previous_was_lowercase_or_digit {
+            push_secret_key_token(&mut tokens, &mut current);
+        }
+        current.push(character.to_ascii_lowercase());
+        previous_was_lowercase_or_digit =
+            character.is_ascii_lowercase() || character.is_ascii_digit();
+    }
+    push_secret_key_token(&mut tokens, &mut current);
+
+    tokens
+}
+
+fn push_secret_key_token(tokens: &mut Vec<String>, current: &mut String) {
+    if !current.is_empty() {
+        tokens.push(std::mem::take(current));
+    }
+}
+
+fn secret_key_pair(window: &[String]) -> bool {
+    matches!(window[0].as_str(), "api" | "access" | "private" | "secret") && window[1] == "key"
 }
 
 /// Supported `zkperf.toml` schema versions.
