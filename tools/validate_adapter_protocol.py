@@ -98,18 +98,47 @@ def _duplicate_id_issues(items: list[dict[str, Any]], path: str) -> list[str]:
     return issues
 
 
-def _request_artifacts(request: dict[str, Any]) -> list[dict[str, Any]]:
+def _request_artifact_entries(
+    request: dict[str, Any],
+) -> list[tuple[str, dict[str, Any]]]:
     operation = request["operation"]
     params = request["params"]
     if operation == "metadata":
-        return params["artifacts"]
+        return [
+            (f"/request/params/artifacts/{index}", artifact)
+            for index, artifact in enumerate(params["artifacts"])
+        ]
     if operation in {"prepare", "prove"}:
-        return params["input_artifacts"]
+        return [
+            (f"/request/params/input_artifacts/{index}", artifact)
+            for index, artifact in enumerate(params["input_artifacts"])
+        ]
     if operation == "execute":
-        return [params["canonical_input"], *params["prepared_artifacts"]]
+        return [
+            ("/request/params/canonical_input", params["canonical_input"]),
+            *[
+                (f"/request/params/prepared_artifacts/{index}", artifact)
+                for index, artifact in enumerate(params["prepared_artifacts"])
+            ],
+        ]
     if operation == "verify":
-        return [params["proof"]]
+        return [("/request/params/proof", params["proof"])]
     return []
+
+
+def _request_artifacts(request: dict[str, Any]) -> list[dict[str, Any]]:
+    return [artifact for _, artifact in _request_artifact_entries(request)]
+
+
+def _duplicate_request_artifact_id_issues(request: dict[str, Any]) -> list[str]:
+    issues: list[str] = []
+    seen: set[str] = set()
+    for path, artifact in _request_artifact_entries(request):
+        artifact_id = artifact["id"]
+        if artifact_id in seen:
+            issues.append(f"semantic {path}/id: duplicate ID {artifact_id}")
+        seen.add(artifact_id)
+    return issues
 
 
 def _result_artifact_ids(result: dict[str, Any]) -> set[str]:
@@ -434,6 +463,7 @@ def _exchange_semantic_issues(
     issues.extend(_workspace_issues(request))
     issues.extend(_artifact_ownership_issues(request, response))
     issues.extend(_request_artifact_kind_issues(request))
+    issues.extend(_duplicate_request_artifact_id_issues(request))
     issues.extend(_duplicate_id_issues(response["artifacts"], "/response/artifacts"))
     if not correlation_issues:
         issues.extend(_failure_phase_issues(request, response))

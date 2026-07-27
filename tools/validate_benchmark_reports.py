@@ -3,6 +3,8 @@ import json
 import math
 import statistics
 from collections import Counter
+from decimal import Decimal
+from fractions import Fraction
 from pathlib import Path
 from typing import Any
 
@@ -60,6 +62,26 @@ def _percentile(values: list[int], percentile: float, method: str) -> float:
     if lower == upper:
         return ordered[lower]
     return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
+
+
+def _mean_matches(actual: int | float | Decimal, values: list[int]) -> bool:
+    if isinstance(actual, float) and not math.isfinite(actual):
+        return False
+    if isinstance(actual, Decimal) and not actual.is_finite():
+        return False
+    expected = Fraction(sum(values), len(values))
+    if Fraction(str(actual)) == expected:
+        return True
+    denominator = expected.denominator
+    for factor in (2, 5):
+        while denominator % factor == 0:
+            denominator //= factor
+    if denominator == 1:
+        return False
+    try:
+        return float(actual) == float(expected)
+    except OverflowError:
+        return False
 
 
 def _schema_issues(report: dict[str, Any], schema: dict[str, Any]) -> list[str]:
@@ -344,7 +366,14 @@ def _semantic_issues(report: dict[str, Any]) -> list[str]:
             "standard_deviation": statistics.stdev(values) if len(values) > 1 else 0,
         }
         for field, expected in expected_summaries.items():
-            if field in summary and not math.isclose(summary[field], expected):
+            if field not in summary:
+                continue
+            matches = (
+                _mean_matches(summary[field], values)
+                if field == "mean"
+                else math.isclose(summary[field], expected)
+            )
+            if not matches:
                 issues.append(
                     f"semantic {measurement_path}/statistics/{field}: summary mismatch"
                 )
@@ -390,6 +419,20 @@ def _semantic_issues(report: dict[str, Any]) -> list[str]:
 
     outcome = report["status"]["outcome"]
     statuses = Counter(identity["status"] for identity in attempts.values())
+    if outcome == "successful":
+        observed_positions = {
+            identity["schedule_position"] for identity in attempts.values()
+        }
+        engine_id = report["engine"]["id"]
+        for index, planned in enumerate(report["run"]["planned_order"]):
+            if (
+                planned["engine_id"] == engine_id
+                and planned["position"] not in observed_positions
+            ):
+                issues.append(
+                    f"semantic /run/planned_order/{index}: "
+                    "successful report lacks an observation"
+                )
     unavailable = any(
         measurement["availability"] == "unavailable"
         for measurement in report["measurements"]
@@ -438,7 +481,10 @@ def main() -> int:
     failed = False
     for path in args.reports:
         try:
-            report = json.loads(path.read_text(encoding="utf-8"))
+            report = json.loads(
+                path.read_text(encoding="utf-8"),
+                parse_float=Decimal,
+            )
         except (OSError, UnicodeError, json.JSONDecodeError) as error:
             failed = True
             print(f"{path}: INVALID")

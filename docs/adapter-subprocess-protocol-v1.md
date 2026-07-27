@@ -273,7 +273,8 @@ in the checked-in examples:
 
 The response `request_id`, `operation`, and `protocol_version` MUST exactly
 match the request. `artifacts` is always present, including when empty.
-Artifact identifiers are unique within a response.
+Artifact identifiers are unique across every normative artifact field within
+each request and within each response.
 
 `status` has three values:
 
@@ -790,11 +791,11 @@ python tools/validate_adapter_protocol.py examples/protocol-v1.json
 
 The schema validates message shape. The protocol validator additionally checks
 request/response correlation, prepare and prove result identity, verification
-digests, response-wide artifact ID uniqueness, proof mode and transformation
-ID uniqueness, artifact identifier resolution and workspace ownership,
-operation-specific artifact kinds, capabilities-first sequencing, run-wide
-request ID uniqueness, highest-exact selected-version agreement, capability
-and boundary completeness for every response status, failure-phase attribution,
-manifest/runtime agreement, and canonical output digests. Runtime
+digests, request- and response-wide artifact ID uniqueness, proof mode and
+transformation ID uniqueness, artifact identifier resolution and workspace
+ownership, operation-specific artifact kinds, capabilities-first sequencing,
+run-wide request ID uniqueness, highest-exact selected-version agreement,
+capability and boundary completeness for every response status, failure-phase
+attribution, manifest/runtime agreement, and canonical output digests. Runtime
 implementations still need filesystem digest validation, process sequencing,
 and the fairness-contract mapping described above.
