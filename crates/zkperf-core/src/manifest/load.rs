@@ -406,13 +406,7 @@ fn validate_remote_profile(
 }
 
 fn manifest_resource_error(path: &str, error: &MetadataError) -> ManifestError {
-    let field_path = match error {
-        MetadataError::EmptyCpuAffinity | MetadataError::DuplicateCpuAffinity => {
-            format!("{path}.cpu_affinity")
-        }
-        _ => path.to_owned(),
-    };
-    ManifestError::new(field_path, error.to_string())
+    ManifestError::new(path, error.to_string())
 }
 
 fn validate_non_secret_key(key: &str, field_path: &str) -> Result<(), ManifestError> {
@@ -742,6 +736,8 @@ mod tests {
 
     #[test]
     fn serde_diagnostic_paths_include_unknown_and_missing_fields() {
+        assert_eq!(refine_deserialize_path("", "invalid type"), "manifest");
+        assert_eq!(refine_deserialize_path(".", "invalid type"), "manifest");
         assert_eq!(
             refine_deserialize_path("workloads[1]", "unknown field `surprise`"),
             "workloads[1].surprise"

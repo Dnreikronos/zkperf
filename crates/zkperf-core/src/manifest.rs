@@ -575,3 +575,31 @@ impl Error for FixtureHashError {
         Some(&self.source)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::{is_secret_like_key, redact_secret_like_values};
+
+    #[test]
+    fn nested_secret_values_are_redacted_recursively() {
+        let mut configuration = json!({
+            "api_version": "v1",
+            "nested": [{
+                "bearerToken": "sensitive",
+            }],
+        });
+
+        redact_secret_like_values(&mut configuration);
+
+        assert_eq!(configuration["api_version"], "v1");
+        assert_eq!(configuration["nested"][0]["bearerToken"], "[redacted]");
+    }
+
+    #[test]
+    fn secret_detection_distinguishes_credentials_from_similar_keys() {
+        assert!(is_secret_like_key("bearerToken"));
+        assert!(!is_secret_like_key("api_version"));
+    }
+}

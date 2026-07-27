@@ -1,0 +1,10 @@
+# Keep the default mutation run focused on the benchmark manifest boundary.
+examine_globs = [
+    "crates/zkperf-core/src/manifest.rs",
+    "crates/zkperf-core/src/manifest/load.rs",
+]
+all_features = true
+additional_cargo_args = ["--locked"]
+
+# Changing the read buffer capacity does not change the resulting digest.
+exclude_re = ['replace \* with \+ in ResolvedFile::sha256']
