@@ -92,6 +92,9 @@ engine.
 
 Paths in the manifest must be relative. The loader resolves them against the
 directory containing `zkperf.toml`, not the process working directory.
+Windows drive-relative paths such as `C:fixture.bin` and rooted paths such as
+`\fixture.bin` are rejected because joining either form can discard part or all
+of the manifest directory.
 
 The manifest itself and every workload specification, input fixture, expected
 output fixture, and adapter manifest must resolve to an existing regular file.

@@ -192,6 +192,18 @@ proof_modes = ["default"]
     assert_eq!(error.field_path(), "engines[1].id");
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_prefixed_paths_cannot_escape_the_manifest_directory() {
+    for fixture in [r#"fixture = "C:input.bin""#, r#"fixture = '\input.bin'"#] {
+        let source = VALID_MANIFEST.replacen(r#"fixture = "input.bin""#, fixture, 1);
+        let temporary = TemporaryManifest::new(&source);
+        let error = BenchmarkManifest::load(temporary.path())
+            .expect_err("Windows-prefixed fixture should be rejected");
+        assert_eq!(error.field_path(), "workloads[0].inputs[0].fixture");
+    }
+}
+
 fn fixture_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")

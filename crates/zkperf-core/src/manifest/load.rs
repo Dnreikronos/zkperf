@@ -423,7 +423,10 @@ fn resolve_output_directory(base: &Path, path: &Path) -> Result<PathBuf, Manifes
 fn require_relative(path: &Path, field_path: &str) -> Result<(), ManifestError> {
     if path.as_os_str().is_empty() {
         Err(ManifestError::new(field_path, "must not be empty"))
-    } else if path.is_absolute() {
+    } else if path
+        .components()
+        .any(|component| matches!(component, Component::Prefix(_) | Component::RootDir))
+    {
         Err(ManifestError::new(
             field_path,
             "must be relative to the manifest",
@@ -453,6 +456,8 @@ fn normalize_path(path: &Path) -> PathBuf {
 mod tests {
     use std::path::{Path, PathBuf};
 
+    #[cfg(windows)]
+    use super::require_relative;
     use super::{line_column, normalize_path, refine_deserialize_path};
 
     #[test]
@@ -474,5 +479,15 @@ mod tests {
             normalize_path(Path::new("suite/bench/../runs")),
             PathBuf::from("suite/runs")
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_drive_relative_and_rooted_paths_are_rejected() {
+        for path in [Path::new(r"C:fixture.bin"), Path::new(r"\fixture.bin")] {
+            let error = require_relative(path, "fixture")
+                .expect_err("Windows-prefixed paths must not escape the manifest directory");
+            assert_eq!(error.field_path(), "fixture");
+        }
     }
 }
