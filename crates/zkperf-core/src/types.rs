@@ -590,6 +590,16 @@ pub enum StandardPhase {
     EndToEnd,
 }
 
+impl StandardPhase {
+    #[must_use]
+    pub const fn is_proof_related(self) -> bool {
+        matches!(
+            self,
+            Self::Proving | Self::Compression | Self::Verification | Self::EndToEnd
+        )
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComponentPhase {
@@ -670,13 +680,7 @@ impl Phase {
     #[must_use]
     pub fn is_proof_related(&self) -> bool {
         match self {
-            Self::Standard(phase) => matches!(
-                phase,
-                StandardPhase::Proving
-                    | StandardPhase::Compression
-                    | StandardPhase::Verification
-                    | StandardPhase::EndToEnd
-            ),
+            Self::Standard(phase) => phase.is_proof_related(),
             Self::Combined(phase) => phase.components().iter().any(|component| {
                 matches!(
                     component,

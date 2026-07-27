@@ -1,0 +1,95 @@
+{
+  "manifest_path": "$FIXTURE_ROOT/zkperf.toml",
+  "manifest_version": "1.0.0",
+  "run": {
+    "warmups": 1,
+    "runs": 3,
+    "policy": {
+      "ordering_algorithm": "seeded_round_robin_v1",
+      "seed": 42,
+      "concurrency": {
+        "mode": "isolated",
+        "parallel_attempts": 1
+      },
+      "retry_policy": "no retries except replacements for invalid attempts",
+      "invalidation_policy": "replace only verified harness or external interference",
+      "outlier_rule": "none",
+      "percentile_method": "linear"
+    },
+    "resources": {
+      "power_profile": "performance",
+      "cpu_affinity": [
+        0
+      ],
+      "cpu_limit": 1,
+      "memory_limit_bytes": 1073741824,
+      "worker_count": 1,
+      "accelerator_allocation": [],
+      "environment_variables": {},
+      "execution_mode": "local",
+      "network_access": false
+    },
+    "timeouts": [
+      {
+        "phase": "execution",
+        "limit_ms": 30000,
+        "termination_grace_ms": 1000
+      },
+      {
+        "phase": "proving",
+        "limit_ms": 300000,
+        "termination_grace_ms": 5000
+      },
+      {
+        "phase": "verification",
+        "limit_ms": 30000,
+        "termination_grace_ms": 1000
+      }
+    ]
+  },
+  "outputs": {
+    "directory": "$FIXTURE_ROOT/results",
+    "formats": [
+      "json",
+      "terminal"
+    ]
+  },
+  "workloads": [
+    {
+      "id": "sha256",
+      "revision": "fixture-v1",
+      "specification": "$FIXTURE_ROOT/workload.md",
+      "implementation_lane": "portable",
+      "security_target_bits": 128,
+      "phases": [
+        "execution",
+        "proving",
+        "verification"
+      ],
+      "inputs": [
+        {
+          "id": "small",
+          "fixture": "$FIXTURE_ROOT/input.bin",
+          "expected_output": "$FIXTURE_ROOT/output.bin",
+          "visibility": "private",
+          "preprocessing": "none",
+          "commit_input": "digest",
+          "commit_output": "bytes"
+        }
+      ]
+    }
+  ],
+  "engines": [
+    {
+      "id": "mock",
+      "adapter": "$FIXTURE_ROOT/mock.zkperf-adapter.json",
+      "proof_modes": [
+        "default"
+      ],
+      "configuration": {
+        "backend": "cpu",
+        "workers": 1
+      }
+    }
+  ]
+}

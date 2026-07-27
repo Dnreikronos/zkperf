@@ -1,0 +1,8 @@
+{
+  "kind": "zkperf-adapter-manifest",
+  "manifest_version": "1.0.0",
+  "adapter_id": "mock",
+  "display_name": "Mock adapter",
+  "command": ["mock-adapter"],
+  "protocol_versions": ["1.0.0"]
+}

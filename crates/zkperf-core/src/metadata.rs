@@ -288,6 +288,16 @@ impl Concurrency {
             Err(MetadataError::InvalidConcurrency)
         }
     }
+
+    #[must_use]
+    pub const fn mode(&self) -> ConcurrencyMode {
+        self.mode
+    }
+
+    #[must_use]
+    pub const fn parallel_attempts(&self) -> NonZeroU64 {
+        self.parallel_attempts
+    }
 }
 
 impl<'de> Deserialize<'de> for Concurrency {
@@ -343,6 +353,36 @@ impl RunPolicy {
             outlier_rule: parts.outlier_rule,
             percentile_method: parts.percentile_method,
         }
+    }
+
+    #[must_use]
+    pub const fn ordering_algorithm(&self) -> &NonEmptyString {
+        &self.ordering_algorithm
+    }
+
+    #[must_use]
+    pub const fn seed(&self) -> u64 {
+        self.seed
+    }
+
+    #[must_use]
+    pub const fn concurrency(&self) -> &Concurrency {
+        &self.concurrency
+    }
+
+    #[must_use]
+    pub const fn retry_policy(&self) -> &NonEmptyString {
+        &self.retry_policy
+    }
+
+    #[must_use]
+    pub const fn invalidation_policy(&self) -> &NonEmptyString {
+        &self.invalidation_policy
+    }
+
+    #[must_use]
+    pub const fn outlier_rule(&self) -> &NonEmptyString {
+        &self.outlier_rule
     }
 
     #[must_use]
@@ -871,6 +911,11 @@ impl UnitInterval {
             Err(MetadataError::InvalidUnitInterval)
         }
     }
+
+    #[must_use]
+    pub const fn as_number(&self) -> &Number {
+        &self.0
+    }
 }
 
 impl Serialize for UnitInterval {
@@ -937,6 +982,61 @@ impl RemoteProfile {
             measurement_method: parts.measurement_method,
             measured_at: parts.measured_at,
         }
+    }
+
+    #[must_use]
+    pub const fn endpoint(&self) -> &AbsoluteUri {
+        &self.endpoint
+    }
+
+    #[must_use]
+    pub const fn client_region(&self) -> &NonEmptyString {
+        &self.client_region
+    }
+
+    #[must_use]
+    pub const fn endpoint_region(&self) -> &NonEmptyString {
+        &self.endpoint_region
+    }
+
+    #[must_use]
+    pub const fn transport(&self) -> &NonEmptyString {
+        &self.transport
+    }
+
+    #[must_use]
+    pub const fn connection_type(&self) -> &NonEmptyString {
+        &self.connection_type
+    }
+
+    #[must_use]
+    pub const fn round_trip_latency_ns(&self) -> Nanoseconds {
+        self.round_trip_latency_ns
+    }
+
+    #[must_use]
+    pub const fn jitter_ns(&self) -> Nanoseconds {
+        self.jitter_ns
+    }
+
+    #[must_use]
+    pub const fn packet_loss_ratio(&self) -> &UnitInterval {
+        &self.packet_loss_ratio
+    }
+
+    #[must_use]
+    pub const fn available_bandwidth_bytes_per_second(&self) -> ByteSize {
+        self.available_bandwidth_bytes_per_second
+    }
+
+    #[must_use]
+    pub const fn measurement_method(&self) -> &NonEmptyString {
+        &self.measurement_method
+    }
+
+    #[must_use]
+    pub const fn measured_at(&self) -> &Timestamp {
+        &self.measured_at
     }
 }
 
@@ -1016,6 +1116,56 @@ impl Resources {
             network_access: parts.network_access,
             remote: parts.remote,
         })
+    }
+
+    #[must_use]
+    pub const fn power_profile(&self) -> &NonEmptyString {
+        &self.power_profile
+    }
+
+    #[must_use]
+    pub fn cpu_affinity(&self) -> &[u64] {
+        &self.cpu_affinity
+    }
+
+    #[must_use]
+    pub const fn cpu_limit(&self) -> &ResourceLimit {
+        &self.cpu_limit
+    }
+
+    #[must_use]
+    pub const fn memory_limit_bytes(&self) -> &ResourceLimit {
+        &self.memory_limit_bytes
+    }
+
+    #[must_use]
+    pub const fn worker_count(&self) -> NonZeroU64 {
+        self.worker_count
+    }
+
+    #[must_use]
+    pub fn accelerator_allocation(&self) -> &[NonEmptyString] {
+        &self.accelerator_allocation
+    }
+
+    #[must_use]
+    pub const fn environment_variables(&self) -> &BTreeMap<String, String> {
+        &self.environment_variables
+    }
+
+    #[must_use]
+    pub const fn execution_mode(&self) -> ExecutionMode {
+        self.execution_mode
+    }
+
+    #[must_use]
+    pub const fn network_access(&self) -> bool {
+        self.network_access
+    }
+
+    #[must_use]
+    pub const fn remote(&self) -> Option<&RemoteProfile> {
+        self.remote.as_ref()
     }
 }
 
