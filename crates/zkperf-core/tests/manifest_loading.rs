@@ -551,10 +551,20 @@ fn output_directory_inspection_errors_are_reported() {
     fs::set_permissions(&blocked, blocked_permissions)
         .expect("blocked directory permissions should be configurable");
 
+    // Root and CAP_DAC_OVERRIDE ignore mode 000, so the load would succeed and
+    // this assertion would not hold. Probe the directory ourselves and skip when
+    // the current process can still traverse it.
+    let privileged = fs::read_dir(&blocked).is_ok();
+
     let result = BenchmarkManifest::load(temporary.path());
 
     fs::set_permissions(&blocked, original_permissions)
         .expect("blocked directory permissions should be restored");
+
+    if privileged {
+        return;
+    }
+
     let error = result.expect_err("output inspection failures should be reported");
     assert_eq!(error.field_path(), "outputs.directory");
     assert!(error.message().contains("could not inspect"));
