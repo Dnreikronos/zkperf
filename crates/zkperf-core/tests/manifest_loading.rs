@@ -24,6 +24,7 @@ fn representative_manifest_loads_deterministically() {
 
     assert_eq!(first, second);
     assert_eq!(first.manifest_version(), ManifestVersion::V1_0_0);
+    assert_eq!(first.manifest_version().to_string(), ManifestVersion::V1);
     assert_eq!(first.run().warmups(), 1);
     assert_eq!(first.run().runs().get(), 3);
     assert_eq!(
@@ -52,6 +53,10 @@ fn representative_manifest_loads_deterministically() {
         first.outputs().formats(),
         &[OutputFormat::Json, OutputFormat::Terminal]
     );
+    assert_eq!(first.run().timeouts().len(), 3);
+    assert_eq!(first.run().timeouts()[0].phase(), StandardPhase::Execution);
+    assert_eq!(first.run().timeouts()[0].limit_ms().get(), 30_000);
+    assert_eq!(first.run().timeouts()[0].termination_grace_ms(), 1_000);
     assert_eq!(
         first.workloads()[0].phases(),
         &[
@@ -60,6 +65,9 @@ fn representative_manifest_loads_deterministically() {
             StandardPhase::Verification,
         ]
     );
+    assert_eq!(first.engines().len(), 1);
+    assert_eq!(first.engines()[0].id().as_str(), "mock");
+    assert_eq!(first.engines()[0].proof_modes()[0].as_str(), "default");
     assert!(first.manifest_path().is_absolute());
     assert!(
         first.workloads()[0].inputs()[0]
@@ -148,6 +156,11 @@ fn manifest_version_errors_use_manifest_domain_language() {
             .to_string()
             .contains("unsupported benchmark manifest version 2.0.0")
     );
+    assert!(
+        error
+            .message()
+            .contains("unsupported benchmark manifest version 2.0.0")
+    );
     assert!(!error.to_string().contains("BenchmarkReport"));
 }
 
@@ -191,6 +204,13 @@ fn validation_errors_identify_exact_field_paths() {
                 "phases = [\"execution\", \"execution\", \"verification\"]",
             ),
             "workloads[0].phases[1]",
+        ),
+        (
+            VALID_MANIFEST.replace(
+                "phases = [\"execution\", \"proving\", \"verification\"]",
+                "phases = []",
+            ),
+            "workloads[0].phases",
         ),
         (
             VALID_MANIFEST.replace("fixture = \"input.bin\"", "fixture = \"missing.bin\""),
@@ -366,6 +386,75 @@ measured_at = "2026-07-26T00:00:00Z""#,
 }
 
 #[test]
+fn invalid_remote_resource_combinations_are_rejected() {
+    let cases = [
+        (
+            VALID_MANIFEST.replace("network_access = false", "network_access = true"),
+            "run.resources.network_access",
+        ),
+        (
+            VALID_MANIFEST
+                .replace("execution_mode = \"local\"", "execution_mode = \"remote\"")
+                .replace("network_access = false", "network_access = true"),
+            "run.resources.remote",
+        ),
+    ];
+
+    for (source, expected_path) in cases {
+        let temporary = TemporaryManifest::new(&source);
+        let error = BenchmarkManifest::load(temporary.path())
+            .expect_err("invalid remote resource combination should be rejected");
+        assert_eq!(error.field_path(), expected_path);
+    }
+}
+
+#[test]
+fn non_default_timeout_values_are_preserved_at_the_valid_boundary() {
+    let source = VALID_MANIFEST
+        .replace("warmups = 1", "warmups = 2")
+        .replacen(
+            "termination_grace_ms = 1_000",
+            "termination_grace_ms = 30_000",
+            1,
+        );
+    let temporary = TemporaryManifest::new(&source);
+    let manifest = BenchmarkManifest::load(temporary.path())
+        .expect("termination grace equal to the timeout limit should be valid");
+
+    assert_eq!(manifest.run().warmups(), 2);
+    assert_eq!(manifest.run().timeouts()[0].termination_grace_ms(), 30_000);
+}
+
+#[test]
+fn environment_variable_names_follow_portable_identifier_rules() {
+    let valid = VALID_MANIFEST.replace(
+        "environment_variables = {}",
+        "environment_variables = { _TRACE = \"enabled\" }",
+    );
+    let temporary = TemporaryManifest::new(&valid);
+    BenchmarkManifest::load(temporary.path())
+        .expect("leading underscores should be valid in environment variable names");
+
+    let cases = [
+        (
+            "environment_variables = { a = \"value\" }",
+            "run.resources.environment_variables.a",
+        ),
+        (
+            "environment_variables = { \"A-b\" = \"value\" }",
+            "run.resources.environment_variables.A-b",
+        ),
+    ];
+    for (environment, expected_path) in cases {
+        let source = VALID_MANIFEST.replace("environment_variables = {}", environment);
+        let temporary = TemporaryManifest::new(&source);
+        let error = BenchmarkManifest::load(temporary.path())
+            .expect_err("non-portable environment variable name should be rejected");
+        assert_eq!(error.field_path(), expected_path);
+    }
+}
+
+#[test]
 fn normalized_debug_redacts_environment_values() {
     let source = VALID_MANIFEST.replace(
         "environment_variables = {}",
@@ -418,6 +507,79 @@ fn secret_like_configuration_keys_are_rejected() {
 
         assert_eq!(error.field_path(), expected_path);
     }
+}
+
+#[test]
+fn output_directory_must_be_a_directory_when_it_exists() {
+    let directory_manifest = TemporaryManifest::new(VALID_MANIFEST);
+    fs::create_dir(directory_manifest.root.join("results"))
+        .expect("output directory should be creatable");
+    let manifest = BenchmarkManifest::load(directory_manifest.path())
+        .expect("an existing output directory should be accepted");
+    assert_eq!(
+        manifest.outputs().directory(),
+        directory_manifest
+            .root
+            .join("results")
+            .canonicalize()
+            .expect("output directory should resolve")
+    );
+
+    let file_manifest = TemporaryManifest::new(VALID_MANIFEST);
+    fs::write(file_manifest.root.join("results"), "not a directory")
+        .expect("output placeholder file should be writable");
+    let error = BenchmarkManifest::load(file_manifest.path())
+        .expect_err("an output path that is a file should be rejected");
+    assert_eq!(error.field_path(), "outputs.directory");
+}
+
+#[cfg(unix)]
+#[test]
+fn output_directory_inspection_errors_are_reported() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let source =
+        VALID_MANIFEST.replace("directory = \"results\"", "directory = \"blocked/results\"");
+    let temporary = TemporaryManifest::new(&source);
+    let blocked = temporary.root.join("blocked");
+    fs::create_dir(&blocked).expect("blocked directory should be creatable");
+    let original_permissions = fs::metadata(&blocked)
+        .expect("blocked directory metadata should be readable")
+        .permissions();
+    let mut blocked_permissions = original_permissions.clone();
+    blocked_permissions.set_mode(0o000);
+    fs::set_permissions(&blocked, blocked_permissions)
+        .expect("blocked directory permissions should be configurable");
+
+    let result = BenchmarkManifest::load(temporary.path());
+
+    fs::set_permissions(&blocked, original_permissions)
+        .expect("blocked directory permissions should be restored");
+    let error = result.expect_err("output inspection failures should be reported");
+    assert_eq!(error.field_path(), "outputs.directory");
+    assert!(error.message().contains("could not inspect"));
+}
+
+#[test]
+fn fixture_hash_errors_preserve_path_display_and_source() {
+    let temporary = TemporaryManifest::new(VALID_MANIFEST);
+    let manifest = BenchmarkManifest::load(temporary.path()).expect("fixture manifest should load");
+    let fixture = manifest.workloads()[0].inputs()[0].fixture();
+    let fixture_path = fixture.path().to_path_buf();
+    fs::remove_file(&fixture_path).expect("fixture should be removable after validation");
+
+    let error = fixture
+        .sha256()
+        .expect_err("hashing a removed fixture should fail");
+
+    assert_eq!(error.path(), fixture_path);
+    assert!(error.to_string().contains("could not hash fixture"));
+    assert!(
+        error
+            .to_string()
+            .contains(&fixture_path.display().to_string())
+    );
+    assert!(std::error::Error::source(&error).is_some());
 }
 
 #[cfg(windows)]

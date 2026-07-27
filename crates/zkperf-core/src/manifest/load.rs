@@ -742,6 +742,8 @@ mod tests {
 
     #[test]
     fn serde_diagnostic_paths_include_unknown_and_missing_fields() {
+        assert_eq!(refine_deserialize_path("", "invalid type"), "manifest");
+        assert_eq!(refine_deserialize_path(".", "invalid type"), "manifest");
         assert_eq!(
             refine_deserialize_path("workloads[1]", "unknown field `surprise`"),
             "workloads[1].surprise"
