@@ -702,10 +702,12 @@ fn resolve_output_directory(base: &Path, path: &Path) -> Result<PathBuf, Manifes
 fn require_relative(path: &Path, field_path: &str) -> Result<(), ManifestError> {
     if path.as_os_str().is_empty() {
         Err(ManifestError::new(field_path, "must not be empty"))
-    } else if path
-        .components()
-        .any(|component| matches!(component, Component::Prefix(_) | Component::RootDir))
-    {
+    } else if path.components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::Prefix(_) | Component::RootDir
+        )
+    }) {
         Err(ManifestError::new(
             field_path,
             "must be relative to the manifest",
@@ -735,7 +737,6 @@ fn normalize_path(path: &Path) -> PathBuf {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    #[cfg(windows)]
     use super::require_relative;
     use super::{line_column, normalize_path, refine_deserialize_path};
 
@@ -758,6 +759,18 @@ mod tests {
             normalize_path(Path::new("suite/bench/../runs")),
             PathBuf::from("suite/runs")
         );
+    }
+
+    #[test]
+    fn parent_paths_are_rejected() {
+        for path in [
+            Path::new("../fixture.bin"),
+            Path::new("suite/../fixture.bin"),
+        ] {
+            let error = require_relative(path, "fixture")
+                .expect_err("parent paths must not escape the manifest directory");
+            assert_eq!(error.field_path(), "fixture");
+        }
     }
 
     #[cfg(windows)]

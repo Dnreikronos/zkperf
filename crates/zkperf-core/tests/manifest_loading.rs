@@ -105,6 +105,9 @@ fn snapshot_normalization_only_rewrites_rooted_paths() {
     let root = r"\\?\D:\a\zkperf";
     let encoded = serde_json::to_string_pretty(&serde_json::json!({
         "manifest_path": r"\\?\D:\a\zkperf\zkperf.toml",
+        "outputs": {
+            "directory": r"\\?\D:\a\zkperf-copy\results",
+        },
         "configuration": {
             "pattern": r"\d+",
         },
@@ -119,6 +122,9 @@ fn snapshot_normalization_only_rewrites_rooted_paths() {
         normalized,
         serde_json::json!({
             "manifest_path": "$FIXTURE_ROOT/zkperf.toml",
+            "outputs": {
+                "directory": r"\\?\D:\a\zkperf-copy\results",
+            },
             "configuration": {
                 "pattern": r"\d+",
             },
@@ -188,6 +194,10 @@ fn validation_errors_identify_exact_field_paths() {
         ),
         (
             VALID_MANIFEST.replace("fixture = \"input.bin\"", "fixture = \"missing.bin\""),
+            "workloads[0].inputs[0].fixture",
+        ),
+        (
+            VALID_MANIFEST.replace("fixture = \"input.bin\"", "fixture = \"../input.bin\""),
             "workloads[0].inputs[0].fixture",
         ),
         (
@@ -438,7 +448,9 @@ fn normalize_snapshot_paths_at(value: &mut Value, root: &str, path: &[&str]) {
         Value::String(text) => {
             if is_snapshot_path_field(path) {
                 if let Some(relative) = text.strip_prefix(root) {
-                    *text = format!("$FIXTURE_ROOT{}", relative.replace('\\', "/"));
+                    if relative.starts_with('/') || relative.starts_with('\\') {
+                        *text = format!("$FIXTURE_ROOT{}", relative.replace('\\', "/"));
+                    }
                 }
             }
         }
