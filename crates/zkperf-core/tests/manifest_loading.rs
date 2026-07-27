@@ -157,14 +157,6 @@ fn validation_errors_identify_exact_field_paths() {
             "run.policy.ordering_algorithm",
         ),
         (
-            VALID_MANIFEST.replace("parallel_attempts = 1", "parallel_attempts = 2"),
-            "run.policy.concurrency",
-        ),
-        (
-            VALID_MANIFEST.replace("cpu_affinity = [0]", "cpu_affinity = [0, 0]"),
-            "run.resources",
-        ),
-        (
             VALID_MANIFEST.replacen(
                 "termination_grace_ms = 1_000",
                 "termination_grace_ms = 30_001",
@@ -235,6 +227,56 @@ fn validation_errors_identify_exact_field_paths() {
 }
 
 #[test]
+fn run_policy_and_resources_reject_nonconforming_values_precisely() {
+    let cases = [
+        (
+            VALID_MANIFEST.replace(
+                "retry_policy = \"no retries except replacements for invalid attempts\"",
+                "retry_policy = \"retry engine errors\"",
+            ),
+            "run.policy.retry_policy",
+        ),
+        (
+            VALID_MANIFEST.replace(
+                "invalidation_policy = \"replace only verified harness or external interference\"",
+                "invalidation_policy = \"drop slow attempts\"",
+            ),
+            "run.policy.invalidation_policy",
+        ),
+        (
+            VALID_MANIFEST.replace("outlier_rule = \"none\"", "outlier_rule = \"trim_top_1\""),
+            "run.policy.outlier_rule",
+        ),
+        (
+            VALID_MANIFEST.replace("parallel_attempts = 1", "parallel_attempts = 2"),
+            "run.policy.concurrency.parallel_attempts",
+        ),
+        (
+            VALID_MANIFEST.replace("cpu_affinity = [0]", "cpu_affinity = [0, 0]"),
+            "run.resources.cpu_affinity[1]",
+        ),
+        (
+            VALID_MANIFEST.replace(
+                "environment_variables = {}",
+                "environment_variables = { API_TOKEN = \"secret\" }",
+            ),
+            "run.resources.environment_variables.API_TOKEN",
+        ),
+    ];
+
+    for (source, expected_path) in cases {
+        let temporary = TemporaryManifest::new(&source);
+        let error = BenchmarkManifest::load(temporary.path())
+            .expect_err("mutated manifest should be rejected");
+        assert_eq!(
+            error.field_path(),
+            expected_path,
+            "unexpected diagnostic for {expected_path}: {error}"
+        );
+    }
+}
+
+#[test]
 fn duplicate_input_and_engine_ids_are_rejected() {
     let duplicate_input = VALID_MANIFEST.replace(
         "[[engines]]",
@@ -269,6 +311,81 @@ proof_modes = ["default"]
     assert_eq!(error.field_path(), "engines[1].id");
 }
 
+#[test]
+fn remote_resource_profiles_are_loaded_and_exposed() {
+    let source = VALID_MANIFEST.replace(
+        "execution_mode = \"local\"\nnetwork_access = false",
+        r#"execution_mode = "remote"
+network_access = true
+
+[run.resources.remote]
+endpoint = "https://prover.example/v1"
+client_region = "us-east-1"
+endpoint_region = "us-west-2"
+transport = "https"
+connection_type = "public-internet"
+round_trip_latency_ns = 12_000_000
+jitter_ns = 400_000
+packet_loss_ratio = 0.01
+available_bandwidth_bytes_per_second = 125_000_000
+measurement_method = "iperf3"
+measured_at = "2026-07-26T00:00:00Z""#,
+    );
+    let temporary = TemporaryManifest::new(&source);
+    let manifest = BenchmarkManifest::load(temporary.path()).expect("remote manifest should load");
+    let remote = manifest
+        .run()
+        .resources()
+        .remote()
+        .expect("remote execution must expose its profile");
+
+    assert_eq!(
+        manifest.run().resources().execution_mode(),
+        ExecutionMode::Remote
+    );
+    assert_eq!(remote.endpoint().as_str(), "https://prover.example/v1");
+    assert_eq!(remote.client_region().as_str(), "us-east-1");
+    assert_eq!(remote.endpoint_region().as_str(), "us-west-2");
+    assert_eq!(remote.round_trip_latency_ns().get(), 12_000_000);
+    assert_eq!(
+        remote.available_bandwidth_bytes_per_second().get(),
+        125_000_000
+    );
+    assert_eq!(remote.packet_loss_ratio().as_number().to_string(), "0.01");
+}
+
+#[test]
+fn normalized_debug_redacts_environment_values() {
+    let source = VALID_MANIFEST.replace(
+        "environment_variables = {}",
+        "environment_variables = { RUST_LOG = \"trace\" }",
+    );
+    let temporary = TemporaryManifest::new(&source);
+    let manifest =
+        BenchmarkManifest::load(temporary.path()).expect("manifest with env should load");
+    let debug = manifest
+        .normalized_debug()
+        .expect("validated manifest should serialize");
+    let normalized: Value =
+        serde_json::from_str(&debug).expect("normalized debug output should be valid JSON");
+
+    assert_eq!(
+        normalized["run"]["resources"]["environment_variables"]["RUST_LOG"],
+        "[redacted]"
+    );
+    assert!(!debug.contains("trace"));
+}
+
+#[test]
+fn secret_like_configuration_keys_are_rejected() {
+    let source = VALID_MANIFEST.replace("backend = \"cpu\"", "api_key = \"secret\"");
+    let temporary = TemporaryManifest::new(&source);
+    let error = BenchmarkManifest::load(temporary.path())
+        .expect_err("secret-like configuration keys should be rejected");
+
+    assert_eq!(error.field_path(), "engines[0].configuration.api_key");
+}
+
 #[cfg(windows)]
 #[test]
 fn windows_prefixed_paths_cannot_escape_the_manifest_directory() {
@@ -289,24 +406,43 @@ fn fixture_root() -> PathBuf {
 }
 
 fn normalize_snapshot_paths(value: &mut Value, root: &str) {
+    normalize_snapshot_paths_at(value, root, &[]);
+}
+
+fn normalize_snapshot_paths_at(value: &mut Value, root: &str, path: &[&str]) {
     match value {
         Value::String(text) => {
-            if let Some(relative) = text.strip_prefix(root) {
-                *text = format!("$FIXTURE_ROOT{}", relative.replace('\\', "/"));
+            if is_snapshot_path_field(path) {
+                if let Some(relative) = text.strip_prefix(root) {
+                    *text = format!("$FIXTURE_ROOT{}", relative.replace('\\', "/"));
+                }
             }
         }
         Value::Array(values) => {
             for value in values {
-                normalize_snapshot_paths(value, root);
+                normalize_snapshot_paths_at(value, root, path);
             }
         }
         Value::Object(values) => {
-            for value in values.values_mut() {
-                normalize_snapshot_paths(value, root);
+            for (key, value) in values {
+                let mut field_path = path.to_vec();
+                field_path.push(key);
+                normalize_snapshot_paths_at(value, root, &field_path);
             }
         }
         Value::Null | Value::Bool(_) | Value::Number(_) => {}
     }
+}
+
+fn is_snapshot_path_field(path: &[&str]) -> bool {
+    matches!(
+        path,
+        ["manifest_path"]
+            | ["outputs", "directory"]
+            | ["workloads", "specification"]
+            | ["workloads", "inputs", "fixture" | "expected_output"]
+            | ["engines", "adapter"]
+    )
 }
 
 struct TemporaryManifest {

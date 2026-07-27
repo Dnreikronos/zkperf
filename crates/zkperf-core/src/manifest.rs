@@ -78,8 +78,86 @@ impl BenchmarkManifest {
     ///
     /// Returns the underlying JSON serialization error.
     pub fn normalized_debug(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
+        let mut value = serde_json::to_value(self)?;
+        redact_normalized_debug(&mut value);
+        serde_json::to_string_pretty(&value)
     }
+}
+
+fn redact_normalized_debug(value: &mut Value) {
+    let Value::Object(root) = value else {
+        return;
+    };
+
+    if let Some(environment_variables) = root
+        .get_mut("run")
+        .and_then(Value::as_object_mut)
+        .and_then(|run| run.get_mut("resources"))
+        .and_then(Value::as_object_mut)
+        .and_then(|resources| resources.get_mut("environment_variables"))
+    {
+        redact_object_values(environment_variables);
+    }
+
+    if let Some(engines) = root.get_mut("engines").and_then(Value::as_array_mut) {
+        for engine in engines {
+            if let Some(configuration) = engine
+                .as_object_mut()
+                .and_then(|engine| engine.get_mut("configuration"))
+            {
+                redact_secret_like_values(configuration);
+            }
+        }
+    }
+}
+
+fn redact_object_values(value: &mut Value) {
+    if let Value::Object(values) = value {
+        for value in values.values_mut() {
+            *value = Value::String("[redacted]".to_owned());
+        }
+    }
+}
+
+fn redact_secret_like_values(value: &mut Value) {
+    match value {
+        Value::Object(values) => {
+            for (key, value) in values {
+                if is_secret_like_key(key) {
+                    *value = Value::String("[redacted]".to_owned());
+                } else {
+                    redact_secret_like_values(value);
+                }
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                redact_secret_like_values(value);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+}
+
+pub(super) fn is_secret_like_key(key: &str) -> bool {
+    let lower = key.to_ascii_lowercase();
+    let tokens: Vec<_> = lower
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty())
+        .collect();
+
+    if tokens.iter().any(|token| {
+        matches!(
+            *token,
+            "secret" | "password" | "passwd" | "credential" | "credentials" | "token" | "bearer"
+        )
+    }) {
+        return true;
+    }
+
+    tokens.windows(2).any(|window| {
+        matches!(window[0], "api" | "access" | "private" | "secret") && window[1] == "key"
+    })
 }
 
 /// Supported `zkperf.toml` schema versions.

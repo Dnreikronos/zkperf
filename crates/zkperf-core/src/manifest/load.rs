@@ -9,10 +9,12 @@ use serde_json::Value;
 use super::{
     BenchmarkManifest, ManifestEngine, ManifestError, ManifestInput, ManifestOutputs, ManifestRun,
     ManifestVersion, ManifestWorkload, OutputFormat, PhaseTimeout, ResolvedFile,
+    is_secret_like_key,
 };
 use crate::{
-    Commitment, ImplementationLane, InputVisibility, NonEmptyString, Resources, RunPolicy, Slug,
-    StandardPhase,
+    Commitment, Concurrency, ConcurrencyMode, ExecutionMode, ImplementationLane, InputVisibility,
+    MetadataError, NonEmptyString, RemoteProfile, ResourceLimit, Resources, ResourcesParts,
+    RunPolicy, RunPolicyParts, Slug, StandardPhase,
 };
 
 #[derive(Deserialize)]
@@ -30,9 +32,104 @@ struct RawManifest {
 struct RawRun {
     warmups: u64,
     runs: u64,
-    policy: RunPolicy,
-    resources: Resources,
+    policy: RawRunPolicy,
+    resources: RawResources,
     timeouts: Vec<RawTimeout>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRunPolicy {
+    ordering_algorithm: ManifestOrderingAlgorithm,
+    seed: u64,
+    concurrency: RawConcurrency,
+    retry_policy: ManifestRetryPolicy,
+    invalidation_policy: ManifestInvalidationPolicy,
+    outlier_rule: ManifestOutlierRule,
+    percentile_method: crate::PercentileMethod,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ManifestOrderingAlgorithm {
+    SeededRoundRobinV1,
+}
+
+impl ManifestOrderingAlgorithm {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::SeededRoundRobinV1 => "seeded_round_robin_v1",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Deserialize)]
+enum ManifestRetryPolicy {
+    #[serde(rename = "no retries except replacements for invalid attempts")]
+    NoRetriesExceptInvalidReplacements,
+}
+
+impl ManifestRetryPolicy {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::NoRetriesExceptInvalidReplacements => {
+                "no retries except replacements for invalid attempts"
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Deserialize)]
+enum ManifestInvalidationPolicy {
+    #[serde(rename = "replace only verified harness or external interference")]
+    ReplaceVerifiedHarnessOrExternalInterference,
+}
+
+impl ManifestInvalidationPolicy {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::ReplaceVerifiedHarnessOrExternalInterference => {
+                "replace only verified harness or external interference"
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum ManifestOutlierRule {
+    None,
+}
+
+impl ManifestOutlierRule {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawConcurrency {
+    mode: ConcurrencyMode,
+    parallel_attempts: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawResources {
+    power_profile: NonEmptyString,
+    cpu_affinity: Vec<u64>,
+    cpu_limit: ResourceLimit,
+    memory_limit_bytes: ResourceLimit,
+    worker_count: u64,
+    accelerator_allocation: Vec<NonEmptyString>,
+    environment_variables: BTreeMap<String, String>,
+    execution_mode: ExecutionMode,
+    network_access: bool,
+    #[serde(default, deserialize_with = "crate::deserialize_optional_non_null")]
+    remote: Option<RemoteProfile>,
 }
 
 #[derive(Deserialize)]
@@ -171,6 +268,8 @@ fn validate(
 
     let runs = NonZeroU64::new(raw.run.runs)
         .ok_or_else(|| ManifestError::new("run.runs", "must be greater than zero"))?;
+    let policy = validate_run_policy(&raw.run.policy)?;
+    let resources = validate_resources(raw.run.resources, "run.resources")?;
     let timeouts = validate_timeouts(raw.run.timeouts)?;
     let outputs = ManifestOutputs {
         directory: resolve_output_directory(base, &raw.outputs.directory)?,
@@ -189,14 +288,155 @@ fn validate(
         run: ManifestRun {
             warmups: raw.run.warmups,
             runs,
-            policy: raw.run.policy,
-            resources: raw.run.resources,
+            policy,
+            resources,
             timeouts,
         },
         outputs,
         workloads,
         engines,
     })
+}
+
+fn validate_run_policy(raw: &RawRunPolicy) -> Result<RunPolicy, ManifestError> {
+    let parallel_attempts =
+        NonZeroU64::new(raw.concurrency.parallel_attempts).ok_or_else(|| {
+            ManifestError::new(
+                "run.policy.concurrency.parallel_attempts",
+                "must be greater than zero",
+            )
+        })?;
+    let concurrency = Concurrency::new(raw.concurrency.mode, parallel_attempts).map_err(|_| {
+        ManifestError::new(
+            "run.policy.concurrency.parallel_attempts",
+            "does not match concurrency mode",
+        )
+    })?;
+
+    Ok(RunPolicy::new(RunPolicyParts {
+        ordering_algorithm: non_empty_literal(raw.ordering_algorithm.as_str()),
+        seed: raw.seed,
+        concurrency,
+        retry_policy: non_empty_literal(raw.retry_policy.as_str()),
+        invalidation_policy: non_empty_literal(raw.invalidation_policy.as_str()),
+        outlier_rule: non_empty_literal(raw.outlier_rule.as_str()),
+        percentile_method: raw.percentile_method,
+    }))
+}
+
+fn validate_resources(raw: RawResources, path: &str) -> Result<Resources, ManifestError> {
+    require_non_empty(&raw.cpu_affinity, &format!("{path}.cpu_affinity"))?;
+    let mut seen_cpu_indexes = HashSet::with_capacity(raw.cpu_affinity.len());
+    for (index, cpu_index) in raw.cpu_affinity.iter().enumerate() {
+        if !seen_cpu_indexes.insert(*cpu_index) {
+            return Err(ManifestError::new(
+                format!("{path}.cpu_affinity[{index}]"),
+                "duplicate CPU affinity index",
+            ));
+        }
+    }
+    let worker_count = NonZeroU64::new(raw.worker_count).ok_or_else(|| {
+        ManifestError::new(format!("{path}.worker_count"), "must be greater than zero")
+    })?;
+    validate_environment_variable_keys(&raw.environment_variables, path)?;
+    validate_remote_profile(
+        raw.execution_mode,
+        raw.network_access,
+        raw.remote.as_ref(),
+        path,
+    )?;
+
+    Resources::new(ResourcesParts {
+        power_profile: raw.power_profile,
+        cpu_affinity: raw.cpu_affinity,
+        cpu_limit: raw.cpu_limit,
+        memory_limit_bytes: raw.memory_limit_bytes,
+        worker_count,
+        accelerator_allocation: raw.accelerator_allocation,
+        environment_variables: raw.environment_variables,
+        execution_mode: raw.execution_mode,
+        network_access: raw.network_access,
+        remote: raw.remote,
+    })
+    .map_err(|error| manifest_resource_error(path, &error))
+}
+
+fn validate_environment_variable_keys(
+    variables: &BTreeMap<String, String>,
+    path: &str,
+) -> Result<(), ManifestError> {
+    for key in variables.keys() {
+        let field_path = format!("{path}.environment_variables.{key}");
+        if !valid_environment_variable_key(key) {
+            return Err(ManifestError::new(
+                field_path,
+                "environment variable names must be non-secret ASCII identifiers",
+            ));
+        }
+        validate_non_secret_key(key, &field_path)?;
+    }
+    Ok(())
+}
+
+fn validate_remote_profile(
+    execution_mode: ExecutionMode,
+    network_access: bool,
+    remote: Option<&RemoteProfile>,
+    path: &str,
+) -> Result<(), ManifestError> {
+    match (execution_mode, network_access, remote.is_some()) {
+        (ExecutionMode::Local, false, false) | (ExecutionMode::Remote, true, true) => Ok(()),
+        (ExecutionMode::Local, true, _) => Err(ManifestError::new(
+            format!("{path}.network_access"),
+            "must be false for local execution",
+        )),
+        (ExecutionMode::Local, false, true) => Err(ManifestError::new(
+            format!("{path}.remote"),
+            "must be absent for local execution",
+        )),
+        (ExecutionMode::Remote, false, _) => Err(ManifestError::new(
+            format!("{path}.network_access"),
+            "must be true for remote execution",
+        )),
+        (ExecutionMode::Remote, true, false) => Err(ManifestError::new(
+            format!("{path}.remote"),
+            "is required for remote execution",
+        )),
+    }
+}
+
+fn manifest_resource_error(path: &str, error: &MetadataError) -> ManifestError {
+    let field_path = match error {
+        MetadataError::EmptyCpuAffinity | MetadataError::DuplicateCpuAffinity => {
+            format!("{path}.cpu_affinity")
+        }
+        _ => path.to_owned(),
+    };
+    ManifestError::new(field_path, error.to_string())
+}
+
+fn validate_non_secret_key(key: &str, field_path: &str) -> Result<(), ManifestError> {
+    if is_secret_like_key(key) {
+        Err(ManifestError::new(
+            field_path,
+            "must not contain secret-like key names",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+fn valid_environment_variable_key(key: &str) -> bool {
+    let mut bytes = key.bytes();
+    let Some(first) = bytes.next() else {
+        return false;
+    };
+    (first.is_ascii_uppercase() || first == b'_')
+        && bytes.all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b'_')
+}
+
+fn non_empty_literal(value: &'static str) -> NonEmptyString {
+    NonEmptyString::new(value).expect("manifest policy literals must be non-empty")
 }
 
 fn validate_timeouts(raw: Vec<RawTimeout>) -> Result<Vec<PhaseTimeout>, ManifestError> {
@@ -345,6 +585,7 @@ fn validate_engines(
             let proof_modes =
                 validate_unique_values(engine.proof_modes, &format!("{path}.proof_modes"))?;
             let adapter = resolve_regular_file(base, &engine.adapter, &format!("{path}.adapter"))?;
+            validate_configuration_keys(&engine.configuration, &format!("{path}.configuration"))?;
             Ok(ManifestEngine {
                 id: engine.id,
                 adapter,
@@ -353,6 +594,37 @@ fn validate_engines(
             })
         })
         .collect()
+}
+
+fn validate_configuration_keys(
+    values: &BTreeMap<String, Value>,
+    path: &str,
+) -> Result<(), ManifestError> {
+    for (key, value) in values {
+        let field_path = format!("{path}.{key}");
+        validate_non_secret_key(key, &field_path)?;
+        validate_json_configuration_keys(value, &field_path)?;
+    }
+    Ok(())
+}
+
+fn validate_json_configuration_keys(value: &Value, path: &str) -> Result<(), ManifestError> {
+    match value {
+        Value::Object(values) => {
+            for (key, value) in values {
+                let field_path = format!("{path}.{key}");
+                validate_non_secret_key(key, &field_path)?;
+                validate_json_configuration_keys(value, &field_path)?;
+            }
+        }
+        Value::Array(values) => {
+            for (index, value) in values.iter().enumerate() {
+                validate_json_configuration_keys(value, &format!("{path}[{index}]"))?;
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
+    Ok(())
 }
 
 fn validate_unique_values<T>(values: Vec<T>, path: &str) -> Result<Vec<T>, ManifestError>

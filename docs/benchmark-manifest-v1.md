@@ -97,11 +97,16 @@ All tables reject unknown fields.
 - `run.warmups` is a non-negative integer. `run.runs` is a positive integer.
 - `run.policy` declares the ordering algorithm and seed, concurrency mode and
   parallel-attempt count, retry and invalidation policies, outlier rule, and
-  percentile method. Every value is required.
+  percentile method. Every value is required. Manifest v1 accepts only the
+  canonical policy values shown in the example: `seeded_round_robin_v1`, no
+  retries except replacements for invalid attempts, replacement only for
+  verified harness or external interference, and `none` for outlier handling.
 - `run.resources` declares the power profile, CPU affinity and limit, memory
   limit, worker count, accelerator allocation, relevant environment variables,
   execution mode, network access, and optional remote profile required by the
-  fairness contract.
+  fairness contract. Environment variable names must be explicit non-secret
+  uppercase ASCII identifiers. Secret-like names such as tokens, passwords,
+  credentials, or API keys are rejected.
 - Every `run.timeouts` entry selects one phase and supplies a positive
   `limit_ms`. `termination_grace_ms` may be zero but cannot exceed the limit.
 - `outputs.directory` is a manifest-relative directory. `outputs.formats`
@@ -113,7 +118,8 @@ All tables reject unknown fields.
   output fixtures, visibility, a non-empty preprocessing policy, and explicit
   input/output commitment policies.
 - Every engine has a unique slug `id`, an adapter manifest file, a unique list
-  of adapter proof-mode IDs, and an optional free-form configuration table.
+  of adapter proof-mode IDs, and an optional free-form non-secret configuration
+  table. Secret-like configuration keys are rejected recursively.
 
 Supported phases are `build`, `setup`, `execution`, `proving`, `compression`,
 `verification`, and `end_to_end`. A timeout must exist for every phase selected
@@ -124,6 +130,13 @@ Run counts and resource policy apply uniformly to every workload-input case and
 selected phase. Each phase uses its corresponding timeout entry. A benchmark
 requiring different counts, resources, or policy for different cases must use
 separate manifests, making every resulting manifest digest unambiguous.
+
+Remote execution requires `execution_mode = "remote"`, `network_access = true`,
+and a `[run.resources.remote]` table. The table records the endpoint URI,
+client and endpoint regions, transport, connection type, round-trip latency,
+jitter, packet-loss ratio, available bandwidth, measurement method, and
+measurement timestamp. Local execution requires `network_access = false` and no
+remote table.
 
 ## 4. Path and fixture rules
 
@@ -153,8 +166,9 @@ Validation rejects:
   format values;
 - invalid slugs, empty text, zero measured-run counts, zero timeout limits, and
   termination grace periods larger than their limits;
-- missing or inconsistent run policy and resources, including invalid
-  concurrency, CPU affinity, or local/remote settings;
+- missing, unsupported, or inconsistent run policy and resources, including
+  invalid concurrency, CPU affinity, unsafe environment-variable names, unsafe
+  configuration keys, or local/remote settings;
 - absolute paths, missing or non-file fixtures, and output paths that are
   existing non-directories;
 - missing timeout policies for selected phases; and
@@ -164,6 +178,9 @@ Validation rejects:
 
 The validated definition has a deterministic, pretty-printed JSON debug
 representation. It uses canonical manifest and fixture paths, stable object-key
-ordering, explicit values, and the original order of user-selected arrays. It
-contains no process-specific debug formatting and is suitable for snapshots and
-`zkperf validate` diagnostics.
+ordering, explicit values, and the original order of user-selected arrays.
+Environment-variable values are redacted, and secret-like configuration values
+are redacted defensively if present through producer APIs. Engine configuration
+and protocol metadata remain a non-secret boundary: credentials, private input
+bytes, signing material, and other secrets do not belong in manifests,
+diagnostics, protocol JSON, or captured logs.

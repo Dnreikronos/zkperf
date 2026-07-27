@@ -911,6 +911,11 @@ impl UnitInterval {
             Err(MetadataError::InvalidUnitInterval)
         }
     }
+
+    #[must_use]
+    pub const fn as_number(&self) -> &Number {
+        &self.0
+    }
 }
 
 impl Serialize for UnitInterval {
@@ -977,6 +982,61 @@ impl RemoteProfile {
             measurement_method: parts.measurement_method,
             measured_at: parts.measured_at,
         }
+    }
+
+    #[must_use]
+    pub const fn endpoint(&self) -> &AbsoluteUri {
+        &self.endpoint
+    }
+
+    #[must_use]
+    pub const fn client_region(&self) -> &NonEmptyString {
+        &self.client_region
+    }
+
+    #[must_use]
+    pub const fn endpoint_region(&self) -> &NonEmptyString {
+        &self.endpoint_region
+    }
+
+    #[must_use]
+    pub const fn transport(&self) -> &NonEmptyString {
+        &self.transport
+    }
+
+    #[must_use]
+    pub const fn connection_type(&self) -> &NonEmptyString {
+        &self.connection_type
+    }
+
+    #[must_use]
+    pub const fn round_trip_latency_ns(&self) -> Nanoseconds {
+        self.round_trip_latency_ns
+    }
+
+    #[must_use]
+    pub const fn jitter_ns(&self) -> Nanoseconds {
+        self.jitter_ns
+    }
+
+    #[must_use]
+    pub const fn packet_loss_ratio(&self) -> &UnitInterval {
+        &self.packet_loss_ratio
+    }
+
+    #[must_use]
+    pub const fn available_bandwidth_bytes_per_second(&self) -> ByteSize {
+        self.available_bandwidth_bytes_per_second
+    }
+
+    #[must_use]
+    pub const fn measurement_method(&self) -> &NonEmptyString {
+        &self.measurement_method
+    }
+
+    #[must_use]
+    pub const fn measured_at(&self) -> &Timestamp {
+        &self.measured_at
     }
 }
 
