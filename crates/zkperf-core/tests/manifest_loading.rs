@@ -58,15 +58,28 @@ fn normalized_debug_output_matches_snapshot() {
         .expect("fixture root should resolve");
     let manifest =
         BenchmarkManifest::load(root.join("zkperf.toml")).expect("fixture manifest should load");
-    let normalized = manifest
+    let debug = manifest
         .normalized_debug()
-        .expect("validated manifest should serialize")
-        .replace(&root.to_string_lossy().to_string(), "$FIXTURE_ROOT")
-        .replace('\\', "/");
+        .expect("validated manifest should serialize");
+    let normalized = normalize_snapshot_json(&debug, &root);
+    let snapshot = include_str!("snapshots/manifest_normalized.json").replace("\r\n", "\n");
+
+    assert_eq!(normalized, snapshot.trim_end());
+}
+
+#[test]
+fn snapshot_normalization_handles_windows_paths_and_line_endings() {
+    let root = Path::new(r"\\?\D:\a\zkperf");
+    let manifest_path = format!(r"{}\zkperf.toml", root.display());
+    let debug = serde_json::to_string_pretty(&serde_json::json!({
+        "manifest_path": manifest_path,
+    }))
+    .expect("synthetic snapshot should serialize")
+    .replace('\n', "\r\n");
 
     assert_eq!(
-        normalized,
-        include_str!("snapshots/manifest_normalized.json").trim_end()
+        normalize_snapshot_json(&debug, root),
+        "{\n  \"manifest_path\": \"$FIXTURE_ROOT/zkperf.toml\"\n}"
     );
 }
 
@@ -127,7 +140,7 @@ fn validation_errors_identify_exact_field_paths() {
             "workloads[0].inputs[0].surprise",
         ),
         (
-            VALID_MANIFEST.replace("fixture = \"input.bin\"\n", ""),
+            VALID_MANIFEST.replacen("fixture = \"input.bin\"", "", 1),
             "workloads[0].inputs[0].fixture",
         ),
     ];
@@ -184,6 +197,19 @@ fn fixture_root() -> PathBuf {
         .join("tests")
         .join("fixtures")
         .join("manifest")
+}
+
+fn normalize_snapshot_json(debug: &str, root: &Path) -> String {
+    let encoded_root = serde_json::to_string(root).expect("fixture root should serialize");
+    let escaped_root = encoded_root
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .expect("serialized fixture root should be a JSON string");
+
+    debug
+        .replace("\r\n", "\n")
+        .replace(escaped_root, "$FIXTURE_ROOT")
+        .replace("\\\\", "/")
 }
 
 struct TemporaryManifest {
