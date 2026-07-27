@@ -7,8 +7,10 @@ loader turns it into a validated, engine-independent definition before planning
 or adapter discovery begins.
 
 Manifest version `1.0.0` has no implicit policy defaults. Counts, timeouts,
-inputs, engines, proof-mode selections, and outputs are explicit so that the
-same file produces the same benchmark definition on every supported host.
+ordering, concurrency, resources, retry and invalidation behavior, outlier
+handling, percentile calculation, inputs, engines, proof-mode selections, and
+outputs are explicit so that the same file produces the same benchmark
+definition on every supported host.
 
 ## 2. Example
 
@@ -18,6 +20,29 @@ manifest_version = "1.0.0"
 [run]
 warmups = 1
 runs = 10
+
+[run.policy]
+ordering_algorithm = "seeded_round_robin_v1"
+seed = 42
+retry_policy = "no retries except replacements for invalid attempts"
+invalidation_policy = "replace only verified harness or external interference"
+outlier_rule = "none"
+percentile_method = "linear"
+
+[run.policy.concurrency]
+mode = "isolated"
+parallel_attempts = 1
+
+[run.resources]
+power_profile = "performance"
+cpu_affinity = [0]
+cpu_limit = 1
+memory_limit_bytes = 1_073_741_824
+worker_count = 1
+accelerator_allocation = []
+environment_variables = {}
+execution_mode = "local"
+network_access = false
 
 [[run.timeouts]]
 phase = "execution"
@@ -70,6 +95,13 @@ All tables reject unknown fields.
 
 - `manifest_version` is required and must be `1.0.0`.
 - `run.warmups` is a non-negative integer. `run.runs` is a positive integer.
+- `run.policy` declares the ordering algorithm and seed, concurrency mode and
+  parallel-attempt count, retry and invalidation policies, outlier rule, and
+  percentile method. Every value is required.
+- `run.resources` declares the power profile, CPU affinity and limit, memory
+  limit, worker count, accelerator allocation, relevant environment variables,
+  execution mode, network access, and optional remote profile required by the
+  fairness contract.
 - Every `run.timeouts` entry selects one phase and supplies a positive
   `limit_ms`. `termination_grace_ms` may be zero but cannot exceed the limit.
 - `outputs.directory` is a manifest-relative directory. `outputs.formats`
@@ -87,6 +119,11 @@ Supported phases are `build`, `setup`, `execution`, `proving`, `compression`,
 `verification`, and `end_to_end`. A timeout must exist for every phase selected
 by any workload. Proof-related phases require at least one proof mode on every
 engine.
+
+Run counts and resource policy apply uniformly to every workload-input case and
+selected phase. Each phase uses its corresponding timeout entry. A benchmark
+requiring different counts, resources, or policy for different cases must use
+separate manifests, making every resulting manifest digest unambiguous.
 
 ## 4. Path and fixture rules
 
@@ -116,6 +153,8 @@ Validation rejects:
   format values;
 - invalid slugs, empty text, zero measured-run counts, zero timeout limits, and
   termination grace periods larger than their limits;
+- missing or inconsistent run policy and resources, including invalid
+  concurrency, CPU affinity, or local/remote settings;
 - absolute paths, missing or non-file fixtures, and output paths that are
   existing non-directories;
 - missing timeout policies for selected phases; and

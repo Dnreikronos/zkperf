@@ -2,7 +2,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use zkperf_core::{BenchmarkManifest, ManifestPhase, OutputFormat, SchemaVersion};
+use serde_json::Value;
+use zkperf_core::{
+    BenchmarkManifest, ConcurrencyMode, ExecutionMode, ManifestVersion, OutputFormat,
+    PercentileMethod, StandardPhase,
+};
 
 const VALID_MANIFEST: &str = include_str!("fixtures/manifest/zkperf.toml");
 const SUPPORT_FILES: &[&str] = &[
@@ -19,9 +23,31 @@ fn representative_manifest_loads_deterministically() {
     let second = BenchmarkManifest::load(&manifest_path).expect("fixture manifest should reload");
 
     assert_eq!(first, second);
-    assert_eq!(first.manifest_version(), SchemaVersion::V1_0_0);
+    assert_eq!(first.manifest_version(), ManifestVersion::V1_0_0);
     assert_eq!(first.run().warmups(), 1);
     assert_eq!(first.run().runs().get(), 3);
+    assert_eq!(
+        first.run().policy().ordering_algorithm().as_str(),
+        "seeded_round_robin_v1"
+    );
+    assert_eq!(first.run().policy().seed(), 42);
+    assert_eq!(
+        first.run().policy().concurrency().mode(),
+        ConcurrencyMode::Isolated
+    );
+    assert_eq!(
+        first.run().policy().concurrency().parallel_attempts().get(),
+        1
+    );
+    assert_eq!(
+        first.run().policy().percentile_method(),
+        PercentileMethod::Linear
+    );
+    assert_eq!(first.run().resources().worker_count().get(), 1);
+    assert_eq!(
+        first.run().resources().execution_mode(),
+        ExecutionMode::Local
+    );
     assert_eq!(
         first.outputs().formats(),
         &[OutputFormat::Json, OutputFormat::Terminal]
@@ -29,9 +55,9 @@ fn representative_manifest_loads_deterministically() {
     assert_eq!(
         first.workloads()[0].phases(),
         &[
-            ManifestPhase::Execution,
-            ManifestPhase::Proving,
-            ManifestPhase::Verification,
+            StandardPhase::Execution,
+            StandardPhase::Proving,
+            StandardPhase::Verification,
         ]
     );
     assert!(first.manifest_path().is_absolute());
@@ -61,32 +87,83 @@ fn normalized_debug_output_matches_snapshot() {
     let debug = manifest
         .normalized_debug()
         .expect("validated manifest should serialize");
-    let normalized = normalize_snapshot_json(&debug, &root);
-    let snapshot = include_str!("snapshots/manifest_normalized.json").replace("\r\n", "\n");
+    let mut normalized: Value =
+        serde_json::from_str(&debug).expect("normalized debug output should be valid JSON");
+    assert_eq!(
+        normalized,
+        serde_json::to_value(&manifest).expect("validated manifest should serialize")
+    );
+    normalize_snapshot_paths(&mut normalized, &root.to_string_lossy());
+    let snapshot: Value = serde_json::from_str(include_str!("snapshots/manifest_normalized.json"))
+        .expect("manifest snapshot should be valid JSON");
 
-    assert_eq!(normalized, snapshot.trim_end());
+    assert_eq!(normalized, snapshot);
 }
 
 #[test]
-fn snapshot_normalization_handles_windows_paths_and_line_endings() {
-    let root = Path::new(r"\\?\D:\a\zkperf");
-    let manifest_path = format!(r"{}\zkperf.toml", root.display());
-    let debug = serde_json::to_string_pretty(&serde_json::json!({
-        "manifest_path": manifest_path,
+fn snapshot_normalization_only_rewrites_rooted_paths() {
+    let root = r"\\?\D:\a\zkperf";
+    let encoded = serde_json::to_string_pretty(&serde_json::json!({
+        "manifest_path": r"\\?\D:\a\zkperf\zkperf.toml",
+        "configuration": {
+            "pattern": r"\d+",
+        },
     }))
     .expect("synthetic snapshot should serialize")
     .replace('\n', "\r\n");
+    let mut normalized: Value =
+        serde_json::from_str(&encoded).expect("CRLF JSON should deserialize");
+    normalize_snapshot_paths(&mut normalized, root);
 
     assert_eq!(
-        normalize_snapshot_json(&debug, root),
-        "{\n  \"manifest_path\": \"$FIXTURE_ROOT/zkperf.toml\"\n}"
+        normalized,
+        serde_json::json!({
+            "manifest_path": "$FIXTURE_ROOT/zkperf.toml",
+            "configuration": {
+                "pattern": r"\d+",
+            },
+        })
     );
+}
+
+#[test]
+fn manifest_version_errors_use_manifest_domain_language() {
+    let source = VALID_MANIFEST.replace(
+        "manifest_version = \"1.0.0\"",
+        "manifest_version = \"2.0.0\"",
+    );
+    let temporary = TemporaryManifest::new(&source);
+    let error = BenchmarkManifest::load(temporary.path())
+        .expect_err("unsupported manifest version should be rejected");
+
+    assert_eq!(error.field_path(), "manifest_version");
+    assert!(
+        error
+            .to_string()
+            .contains("unsupported benchmark manifest version 2.0.0")
+    );
+    assert!(!error.to_string().contains("BenchmarkReport"));
 }
 
 #[test]
 fn validation_errors_identify_exact_field_paths() {
     let cases = [
         (VALID_MANIFEST.replace("runs = 3", "runs = 0"), "run.runs"),
+        (
+            VALID_MANIFEST.replace(
+                "ordering_algorithm = \"seeded_round_robin_v1\"",
+                "ordering_algorithm = \"\"",
+            ),
+            "run.policy.ordering_algorithm",
+        ),
+        (
+            VALID_MANIFEST.replace("parallel_attempts = 1", "parallel_attempts = 2"),
+            "run.policy.concurrency",
+        ),
+        (
+            VALID_MANIFEST.replace("cpu_affinity = [0]", "cpu_affinity = [0, 0]"),
+            "run.resources",
+        ),
         (
             VALID_MANIFEST.replacen(
                 "termination_grace_ms = 1_000",
@@ -211,17 +288,25 @@ fn fixture_root() -> PathBuf {
         .join("manifest")
 }
 
-fn normalize_snapshot_json(debug: &str, root: &Path) -> String {
-    let encoded_root = serde_json::to_string(root).expect("fixture root should serialize");
-    let escaped_root = encoded_root
-        .strip_prefix('"')
-        .and_then(|value| value.strip_suffix('"'))
-        .expect("serialized fixture root should be a JSON string");
-
-    debug
-        .replace("\r\n", "\n")
-        .replace(escaped_root, "$FIXTURE_ROOT")
-        .replace("\\\\", "/")
+fn normalize_snapshot_paths(value: &mut Value, root: &str) {
+    match value {
+        Value::String(text) => {
+            if let Some(relative) = text.strip_prefix(root) {
+                *text = format!("$FIXTURE_ROOT{}", relative.replace('\\', "/"));
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                normalize_snapshot_paths(value, root);
+            }
+        }
+        Value::Object(values) => {
+            for value in values.values_mut() {
+                normalize_snapshot_paths(value, root);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
 }
 
 struct TemporaryManifest {

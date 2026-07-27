@@ -7,15 +7,18 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::{
-    BenchmarkManifest, ManifestEngine, ManifestError, ManifestInput, ManifestOutputs,
-    ManifestPhase, ManifestRun, ManifestWorkload, OutputFormat, PhaseTimeout, ResolvedFile,
+    BenchmarkManifest, ManifestEngine, ManifestError, ManifestInput, ManifestOutputs, ManifestRun,
+    ManifestVersion, ManifestWorkload, OutputFormat, PhaseTimeout, ResolvedFile,
 };
-use crate::{Commitment, ImplementationLane, InputVisibility, NonEmptyString, SchemaVersion, Slug};
+use crate::{
+    Commitment, ImplementationLane, InputVisibility, NonEmptyString, Resources, RunPolicy, Slug,
+    StandardPhase,
+};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawManifest {
-    manifest_version: SchemaVersion,
+    manifest_version: ManifestVersion,
     run: RawRun,
     outputs: RawOutputs,
     workloads: Vec<RawWorkload>,
@@ -27,13 +30,15 @@ struct RawManifest {
 struct RawRun {
     warmups: u64,
     runs: u64,
+    policy: RunPolicy,
+    resources: Resources,
     timeouts: Vec<RawTimeout>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawTimeout {
-    phase: ManifestPhase,
+    phase: StandardPhase,
     limit_ms: u64,
     termination_grace_ms: u64,
 }
@@ -53,7 +58,7 @@ struct RawWorkload {
     specification: PathBuf,
     implementation_lane: ImplementationLane,
     security_target_bits: u64,
-    phases: Vec<ManifestPhase>,
+    phases: Vec<StandardPhase>,
     inputs: Vec<RawInput>,
 }
 
@@ -184,6 +189,8 @@ fn validate(
         run: ManifestRun {
             warmups: raw.run.warmups,
             runs,
+            policy: raw.run.policy,
+            resources: raw.run.resources,
             timeouts,
         },
         outputs,

@@ -10,20 +10,21 @@ use std::io::{self, Read};
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+use serde::de::Error as _;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    Commitment, ImplementationLane, InputVisibility, NonEmptyString, SchemaVersion, Sha256Digest,
-    Slug,
+    Commitment, ImplementationLane, InputVisibility, NonEmptyString, Resources, RunPolicy,
+    Sha256Digest, Slug, StandardPhase,
 };
 
 /// A fully validated benchmark manifest.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct BenchmarkManifest {
     manifest_path: PathBuf,
-    manifest_version: SchemaVersion,
+    manifest_version: ManifestVersion,
     run: ManifestRun,
     outputs: ManifestOutputs,
     workloads: Vec<ManifestWorkload>,
@@ -47,7 +48,7 @@ impl BenchmarkManifest {
     }
 
     #[must_use]
-    pub const fn manifest_version(&self) -> SchemaVersion {
+    pub const fn manifest_version(&self) -> ManifestVersion {
         self.manifest_version
     }
 
@@ -81,11 +82,59 @@ impl BenchmarkManifest {
     }
 }
 
+/// Supported `zkperf.toml` schema versions.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum ManifestVersion {
+    V1_0_0,
+}
+
+impl ManifestVersion {
+    pub const V1: &str = "1.0.0";
+
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::V1_0_0 => Self::V1,
+        }
+    }
+}
+
+impl Display for ManifestVersion {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl Serialize for ManifestVersion {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for ManifestVersion {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        match String::deserialize(deserializer)?.as_str() {
+            Self::V1 => Ok(Self::V1_0_0),
+            version => Err(D::Error::custom(format!(
+                "unsupported benchmark manifest version {version}"
+            ))),
+        }
+    }
+}
+
 /// Manifest-wide repetition and timeout policy.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ManifestRun {
     warmups: u64,
     runs: NonZeroU64,
+    policy: RunPolicy,
+    resources: Resources,
     timeouts: Vec<PhaseTimeout>,
 }
 
@@ -101,45 +150,32 @@ impl ManifestRun {
     }
 
     #[must_use]
+    pub const fn policy(&self) -> &RunPolicy {
+        &self.policy
+    }
+
+    #[must_use]
+    pub const fn resources(&self) -> &Resources {
+        &self.resources
+    }
+
+    #[must_use]
     pub fn timeouts(&self) -> &[PhaseTimeout] {
         &self.timeouts
-    }
-}
-
-/// A phase accepted by benchmark manifest v1.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ManifestPhase {
-    Build,
-    Setup,
-    Execution,
-    Proving,
-    Compression,
-    Verification,
-    EndToEnd,
-}
-
-impl ManifestPhase {
-    #[must_use]
-    pub const fn is_proof_related(self) -> bool {
-        matches!(
-            self,
-            Self::Proving | Self::Compression | Self::Verification | Self::EndToEnd
-        )
     }
 }
 
 /// Timeout policy for one selected phase.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 pub struct PhaseTimeout {
-    phase: ManifestPhase,
+    phase: StandardPhase,
     limit_ms: NonZeroU64,
     termination_grace_ms: u64,
 }
 
 impl PhaseTimeout {
     #[must_use]
-    pub const fn phase(self) -> ManifestPhase {
+    pub const fn phase(self) -> StandardPhase {
         self.phase
     }
 
@@ -191,7 +227,7 @@ pub struct ManifestWorkload {
     specification: ResolvedFile,
     implementation_lane: ImplementationLane,
     security_target_bits: NonZeroU64,
-    phases: Vec<ManifestPhase>,
+    phases: Vec<StandardPhase>,
     inputs: Vec<ManifestInput>,
 }
 
@@ -222,7 +258,7 @@ impl ManifestWorkload {
     }
 
     #[must_use]
-    pub fn phases(&self) -> &[ManifestPhase] {
+    pub fn phases(&self) -> &[StandardPhase] {
         &self.phases
     }
 

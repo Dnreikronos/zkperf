@@ -9,7 +9,7 @@ mod types;
 
 pub use manifest::{
     BenchmarkManifest, FixtureHashError, ManifestEngine, ManifestError, ManifestInput,
-    ManifestOutputs, ManifestPhase, ManifestRun, ManifestWorkload, OutputFormat, PhaseTimeout,
+    ManifestOutputs, ManifestRun, ManifestVersion, ManifestWorkload, OutputFormat, PhaseTimeout,
     ResolvedFile,
 };
 pub use measurement::{

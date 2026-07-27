@@ -4,6 +4,31 @@
   "run": {
     "warmups": 1,
     "runs": 3,
+    "policy": {
+      "ordering_algorithm": "seeded_round_robin_v1",
+      "seed": 42,
+      "concurrency": {
+        "mode": "isolated",
+        "parallel_attempts": 1
+      },
+      "retry_policy": "no retries except replacements for invalid attempts",
+      "invalidation_policy": "replace only verified harness or external interference",
+      "outlier_rule": "none",
+      "percentile_method": "linear"
+    },
+    "resources": {
+      "power_profile": "performance",
+      "cpu_affinity": [
+        0
+      ],
+      "cpu_limit": 1,
+      "memory_limit_bytes": 1073741824,
+      "worker_count": 1,
+      "accelerator_allocation": [],
+      "environment_variables": {},
+      "execution_mode": "local",
+      "network_access": false
+    },
     "timeouts": [
       {
         "phase": "execution",
