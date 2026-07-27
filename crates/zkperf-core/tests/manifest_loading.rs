@@ -313,10 +313,11 @@ proof_modes = ["default"]
 
 #[test]
 fn remote_resource_profiles_are_loaded_and_exposed() {
-    let source = VALID_MANIFEST.replace(
-        "execution_mode = \"local\"\nnetwork_access = false",
-        r#"execution_mode = "remote"
-network_access = true
+    let source =
+        VALID_MANIFEST.replace("execution_mode = \"local\"", "execution_mode = \"remote\"");
+    let source = source.replace(
+        "network_access = false",
+        r#"network_access = true
 
 [run.resources.remote]
 endpoint = "https://prover.example/v1"
