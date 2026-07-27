@@ -336,6 +336,27 @@ class AdapterProtocolTests(unittest.TestCase):
                     ),
                 )
 
+    def test_request_artifact_ids_are_unique(self) -> None:
+        prove = copy.deepcopy(self.exchange("prove_transform"))
+        duplicate = copy.deepcopy(prove["request"]["params"]["input_artifacts"][0])
+        duplicate["path"] = "inputs/duplicate-proof.bin"
+        duplicate["digest"]["value"] = "4" * 64
+        prove["request"]["params"]["input_artifacts"].append(duplicate)
+
+        execute = copy.deepcopy(self.exchange("execute"))
+        canonical = execute["request"]["params"]["canonical_input"]
+        execute["request"]["params"]["prepared_artifacts"][0]["id"] = canonical["id"]
+
+        for exchange in (prove, execute):
+            with self.subTest(operation=exchange["request"]["operation"]):
+                self.assertValid(exchange["request"])
+                issues = validate_exchange(
+                    exchange["request"],
+                    exchange["response"],
+                    self.schema,
+                )
+                self.assertTrue(any("duplicate ID" in issue for issue in issues))
+
     def test_response_artifact_ids_are_unique_for_every_status(self) -> None:
         source_artifact = self.exchange("prove_initial")["response"]["artifacts"][0]
         for name in ("execute", "unsupported_proof_mode", "proving_failure"):
