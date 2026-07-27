@@ -1,5 +1,6 @@
 import copy
 import json
+import math
 import subprocess
 import sys
 import tempfile
@@ -61,6 +62,54 @@ class BenchmarkReportTests(unittest.TestCase):
             with self.subTest(path=path.name):
                 report = json.loads(path.read_text())
                 self.assertEqual([], validate_report(report, self.schema))
+
+    def test_exact_means_reject_tolerance_sized_errors(self) -> None:
+        for observation, incorrect_mean in (
+            (1_000_000_000, 1_000_000_001),
+            (9_007_199_254_740_992, 9_007_199_254_740_993),
+        ):
+            report = json.loads((REPORTS / "successful.json").read_text())
+            for sample in report["measurements"][1]["samples"][1:]:
+                sample["value"] = observation
+            statistics = report["measurements"][1]["statistics"]
+            for field in ("minimum", "maximum", "median"):
+                statistics[field] = observation
+            statistics["mean"] = incorrect_mean
+            statistics["standard_deviation"] = 0
+            statistics["percentiles"] = {
+                "p50": observation,
+                "p95": observation,
+            }
+
+            with self.subTest(observation=observation):
+                self.assertTrue(
+                    any(
+                        "/statistics/mean: summary mismatch" in issue
+                        for issue in validate_report(report, self.schema)
+                    )
+                )
+
+    def test_non_terminating_mean_remains_valid(self) -> None:
+        report = json.loads((REPORTS / "successful.json").read_text())
+        for sample, value in zip(
+            report["measurements"][1]["samples"][1:],
+            (0, 0, 1),
+            strict=True,
+        ):
+            sample["value"] = value
+        statistics = report["measurements"][1]["statistics"]
+        statistics.update(
+            {
+                "minimum": 0,
+                "maximum": 1,
+                "median": 0,
+                "mean": 1 / 3,
+                "standard_deviation": math.sqrt(1 / 3),
+                "percentiles": {"p50": 0, "p95": 0.9},
+            }
+        )
+
+        self.assertEqual([], validate_report(report, self.schema))
 
     def test_phase_specific_success_correctness(self) -> None:
         base = json.loads((REPORTS / "successful.json").read_text())
@@ -143,6 +192,75 @@ class BenchmarkReportTests(unittest.TestCase):
         self.assertIn(f"{malformed}: INVALID", result.stdout)
         self.assertIn(f"{invalid_utf8}: INVALID", result.stdout)
         self.assertIn("successful.json: valid", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_rejects_non_finite_decoded_mean_without_traceback(self) -> None:
+        report = json.loads((REPORTS / "successful.json").read_text())
+        report["measurements"][0]["statistics"]["mean"] = "NON_FINITE_MEAN"
+        encoded = json.dumps(report).replace('"NON_FINITE_MEAN"', "1e400")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "non-finite-mean.json"
+            path.write_text(encoded, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "tools" / "validate_benchmark_reports.py"),
+                    str(path),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn(f"{path}: INVALID", result.stdout)
+        self.assertIn("/statistics/mean: summary mismatch", result.stdout)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_cli_preserves_exact_decimal_means_above_f64_integer_range(self) -> None:
+        observation = 9_007_199_254_740_992
+        report = json.loads((REPORTS / "successful.json").read_text())
+        for sample in report["measurements"][1]["samples"][1:]:
+            sample["value"] = observation
+        statistics = report["measurements"][1]["statistics"]
+        for field in ("minimum", "maximum", "median"):
+            statistics[field] = observation
+        statistics["mean"] = "EXACT_DECIMAL_MEAN"
+        statistics["standard_deviation"] = 0
+        statistics["percentiles"] = {
+            "p50": observation,
+            "p95": observation,
+        }
+        encoded = json.dumps(report)
+
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            valid = temp / "valid-decimal-mean.json"
+            valid.write_text(
+                encoded.replace('"EXACT_DECIMAL_MEAN"', "9007199254740992.0"),
+                encoding="utf-8",
+            )
+            invalid = temp / "invalid-decimal-mean.json"
+            invalid.write_text(
+                encoded.replace('"EXACT_DECIMAL_MEAN"', "9007199254740993.0"),
+                encoding="utf-8",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "tools" / "validate_benchmark_reports.py"),
+                    str(valid),
+                    str(invalid),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn(f"{valid}: valid", result.stdout)
+        self.assertIn(f"{invalid}: INVALID", result.stdout)
+        self.assertIn("/statistics/mean: summary mismatch", result.stdout)
         self.assertNotIn("Traceback", result.stderr)
 
     def test_negative_fixtures(self) -> None:

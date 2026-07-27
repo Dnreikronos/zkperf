@@ -406,8 +406,9 @@ fn validate_summary(
     } else {
         u128::from(ordered[ordered.len() / 2]) * 2
     };
+    let expected_sum = ordered.iter().copied().map(u128::from).sum();
     let float_values: Vec<_> = ordered.iter().copied().map(value_as_f64).collect();
-    let expected_mean = float_values.iter().sum::<f64>() / count_as_f64(ordered.len());
+    let expected_mean = ratio_as_f64(expected_sum, ordered.len());
     let expected_deviation = if ordered.len() == 1 {
         0.0
     } else {
@@ -427,7 +428,9 @@ fn validate_summary(
     if !number_matches_twice(median, expected_median_twice) {
         return invalid(format!("{path}/median: summary mismatch"));
     }
-    if mean.is_some_and(|actual| !number_float_eq(actual, expected_mean)) {
+    if mean.is_some_and(|actual| {
+        !number_matches_mean(actual, expected_sum, ordered.len(), expected_mean)
+    }) {
         return invalid(format!("{path}/mean: summary mismatch"));
     }
     if standard_deviation.is_some_and(|actual| !number_float_eq(actual, expected_deviation)) {
@@ -488,46 +491,154 @@ fn percentile_value(
 }
 
 fn number_matches_twice(actual: &Number, expected_twice: u128) -> bool {
+    number_matches_ratio(actual, expected_twice, 2)
+}
+
+fn number_matches_mean(
+    actual: &Number,
+    expected_sum: u128,
+    count: usize,
+    expected_float: f64,
+) -> bool {
+    let Some(count) = u128::try_from(count).ok() else {
+        return false;
+    };
+    if number_matches_ratio(actual, expected_sum, count) {
+        return true;
+    }
+    if ratio_has_terminating_decimal(expected_sum, count) {
+        return false;
+    }
+    actual
+        .as_f64()
+        .is_some_and(|actual| actual.to_bits() == expected_float.to_bits())
+}
+
+fn number_matches_ratio(actual: &Number, expected_numerator: u128, denominator: u128) -> bool {
     let text = actual.to_string();
-    let (significand, exponent) = match text.find(['e', 'E']) {
-        Some(index) => (&text[..index], text[index + 1..].parse::<i32>().ok()),
-        None => (text.as_str(), Some(0)),
+    let (negative, unsigned) = text
+        .strip_prefix('-')
+        .map_or((false, text.as_str()), |unsigned| (true, unsigned));
+    let (significand, exponent) = match unsigned.find(['e', 'E']) {
+        Some(index) => (
+            &unsigned[..index],
+            unsigned[index + 1..].parse::<i32>().ok(),
+        ),
+        None => (unsigned, Some(0)),
     };
     let Some(exponent) = exponent else {
         return false;
     };
-    if significand.starts_with('-') {
-        return false;
-    }
     let fraction_digits = significand
         .split_once('.')
         .map_or(0, |(_, fraction)| fraction.len());
-    let digits = significand.replace('.', "");
-    let Some(digits) = digits.parse::<u128>().ok() else {
-        return false;
+    let raw_digits = significand.replace('.', "");
+    let Some(first_nonzero) = raw_digits.bytes().position(|digit| digit != b'0') else {
+        return expected_numerator == 0;
     };
-    let Some(doubled) = digits.checked_mul(2) else {
+    if negative {
         return false;
-    };
+    }
+    let trailing_zeros = raw_digits
+        .bytes()
+        .rev()
+        .take_while(|digit| *digit == b'0')
+        .count();
+    let significant_end = raw_digits.len() - trailing_zeros;
     let Ok(fraction_digits) = i32::try_from(fraction_digits) else {
         return false;
     };
-    let Some(adjusted_exponent) = exponent.checked_sub(fraction_digits) else {
+    let Ok(trailing_zeros) = i32::try_from(trailing_zeros) else {
         return false;
     };
-    if adjusted_exponent >= 0 {
-        let Some(scale) = 10_u128.checked_pow(adjusted_exponent.unsigned_abs()) else {
-            return false;
-        };
-        doubled
-            .checked_mul(scale)
-            .is_some_and(|value| value == expected_twice)
-    } else {
-        let Some(scale) = 10_u128.checked_pow(adjusted_exponent.unsigned_abs()) else {
-            return false;
-        };
-        doubled % scale == 0 && doubled / scale == expected_twice
+    let Some(adjusted_exponent) = exponent
+        .checked_sub(fraction_digits)
+        .and_then(|value| value.checked_add(trailing_zeros))
+    else {
+        return false;
+    };
+    terminating_ratio_decimal(expected_numerator, denominator).is_some_and(
+        |(expected_digits, expected_exponent)| {
+            raw_digits[first_nonzero..significant_end] == expected_digits
+                && adjusted_exponent == expected_exponent
+        },
+    )
+}
+
+fn ratio_has_terminating_decimal(numerator: u128, denominator: u128) -> bool {
+    reduced_terminating_ratio(numerator, denominator).is_some()
+}
+
+fn terminating_ratio_decimal(numerator: u128, denominator: u128) -> Option<(String, i32)> {
+    let (numerator, twos, fives) = reduced_terminating_ratio(numerator, denominator)?;
+    if numerator == 0 {
+        return Some((String::new(), 0));
     }
+    let scale = twos.max(fives);
+    let mut digits = numerator.to_string().into_bytes();
+    for _ in twos..scale {
+        multiply_decimal_digits(&mut digits, 2);
+    }
+    for _ in fives..scale {
+        multiply_decimal_digits(&mut digits, 5);
+    }
+    let trailing_zeros = digits
+        .iter()
+        .rev()
+        .take_while(|digit| **digit == b'0')
+        .count();
+    digits.truncate(digits.len() - trailing_zeros);
+    let exponent = i32::try_from(trailing_zeros)
+        .ok()?
+        .checked_sub(i32::try_from(scale).ok()?)?;
+    Some((
+        String::from_utf8(digits).expect("decimal multiplication preserves ASCII"),
+        exponent,
+    ))
+}
+
+fn reduced_terminating_ratio(numerator: u128, denominator: u128) -> Option<(u128, u32, u32)> {
+    if denominator == 0 {
+        return None;
+    }
+    let divisor = greatest_common_divisor(numerator, denominator);
+    let numerator = numerator / divisor;
+    let mut denominator = denominator / divisor;
+    let mut twos = 0;
+    while denominator % 2 == 0 {
+        denominator /= 2;
+        twos += 1;
+    }
+    let mut fives = 0;
+    while denominator % 5 == 0 {
+        denominator /= 5;
+        fives += 1;
+    }
+    (denominator == 1).then_some((numerator, twos, fives))
+}
+
+fn multiply_decimal_digits(digits: &mut Vec<u8>, factor: u8) {
+    let mut carry = 0_u16;
+    for digit in digits.iter_mut().rev() {
+        let product = u16::from(*digit - b'0') * u16::from(factor) + carry;
+        *digit = b'0' + u8::try_from(product % 10).expect("decimal digit fits in u8");
+        carry = product / 10;
+    }
+    if carry != 0 {
+        digits.insert(
+            0,
+            b'0' + u8::try_from(carry).expect("single-digit multiplier leaves one carry digit"),
+        );
+    }
+}
+
+const fn greatest_common_divisor(mut left: u128, mut right: u128) -> u128 {
+    while right != 0 {
+        let remainder = left % right;
+        left = right;
+        right = remainder;
+    }
+    left
 }
 
 fn number_float_eq(actual: &Number, expected: f64) -> bool {
@@ -544,6 +655,75 @@ fn count_as_u64(value: usize) -> Result<u64, ReportError> {
 #[allow(clippy::cast_precision_loss)]
 fn count_as_f64(value: usize) -> f64 {
     value as f64
+}
+
+fn ratio_as_f64(numerator: u128, denominator: usize) -> f64 {
+    const FRACTION_BITS: u32 = f64::MANTISSA_DIGITS - 1;
+    const EXPONENT_BIAS: i32 = 1023;
+
+    if numerator == 0 {
+        return 0.0;
+    }
+    let denominator = u128::try_from(denominator).expect("usize always fits in u128");
+    let numerator_bits =
+        i32::try_from(u128::BITS - numerator.leading_zeros()).expect("u128 bit count fits in i32");
+    let denominator_bits = i32::try_from(u128::BITS - denominator.leading_zeros())
+        .expect("u128 bit count fits in i32");
+    let mut exponent = numerator_bits - denominator_bits;
+    let below_exponent = if exponent >= 0 {
+        numerator
+            < denominator
+                .checked_shl(exponent.unsigned_abs())
+                .expect("ratio exponent is bounded by numerator width")
+    } else {
+        numerator
+            .checked_shl(exponent.unsigned_abs())
+            .expect("ratio exponent is bounded by denominator width")
+            < denominator
+    };
+    if below_exponent {
+        exponent -= 1;
+    }
+
+    let precision_shift =
+        i32::try_from(FRACTION_BITS).expect("f64 precision fits in i32") - exponent;
+    let (scaled_numerator, scaled_denominator) = if precision_shift >= 0 {
+        (
+            numerator
+                .checked_shl(precision_shift.unsigned_abs())
+                .expect("u64 sample mean fits in u128 at f64 precision"),
+            denominator,
+        )
+    } else {
+        (
+            numerator,
+            denominator
+                .checked_shl(precision_shift.unsigned_abs())
+                .expect("u64 sample mean denominator fits in u128 at f64 precision"),
+        )
+    };
+    let mut significand = scaled_numerator / scaled_denominator;
+    let remainder = scaled_numerator % scaled_denominator;
+    let twice_remainder = remainder
+        .checked_mul(2)
+        .expect("scaled denominator leaves one rounding bit");
+    if twice_remainder > scaled_denominator
+        || (twice_remainder == scaled_denominator && significand % 2 == 1)
+    {
+        significand += 1;
+    }
+
+    let carry = 1_u128 << f64::MANTISSA_DIGITS;
+    if significand == carry {
+        significand >>= 1;
+        exponent += 1;
+    }
+    let implicit_bit = 1_u128 << FRACTION_BITS;
+    let fraction =
+        u64::try_from(significand - implicit_bit).expect("f64 fraction fits in its storage bits");
+    let biased_exponent =
+        u64::try_from(exponent + EXPONENT_BIAS).expect("u64 sample means are normal f64 values");
+    f64::from_bits((biased_exponent << FRACTION_BITS) | fraction)
 }
 
 #[allow(clippy::cast_precision_loss)]
@@ -710,4 +890,56 @@ fn float_eq(left: f64, right: f64) -> bool {
 
 fn invalid<T>(message: impl Into<String>) -> Result<T, ReportError> {
     Err(ReportError::InvalidGraph(message.into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Number;
+
+    use super::{number_matches_ratio, ratio_as_f64};
+
+    #[test]
+    fn exact_ratio_comparison_avoids_cross_product_overflow() {
+        let denominator = 10_000_000_000_u128;
+        let numerator = u128::from(u64::MAX) * denominator - 1;
+        let actual: Number = serde_json::from_str("18446744073709551614.9999999999").unwrap();
+
+        assert!(number_matches_ratio(&actual, numerator, denominator));
+
+        for encoded in ["0.5", "0.50", "5e-1"] {
+            let actual: Number = serde_json::from_str(encoded).unwrap();
+            assert!(number_matches_ratio(&actual, 1, 2));
+        }
+        let smallest_u64_fraction: Number = serde_json::from_str(
+            "0.0000000000000000000542101086242752217003726400434970855712890625",
+        )
+        .unwrap();
+        assert!(number_matches_ratio(
+            &smallest_u64_fraction,
+            1,
+            1_u128 << 64
+        ));
+    }
+
+    #[test]
+    fn rational_conversion_rounds_once_to_nearest_even() {
+        let midpoint_above_even = (1_u128 << f64::MANTISSA_DIGITS) + 1;
+        assert_eq!(
+            ratio_as_f64(midpoint_above_even, 1).to_bits(),
+            0x4340_0000_0000_0000
+        );
+
+        let midpoint_above_odd = midpoint_above_even + 2;
+        assert_eq!(
+            ratio_as_f64(midpoint_above_odd, 1).to_bits(),
+            0x4340_0000_0000_0002
+        );
+
+        let reported_sum = u128::from(u64::MAX) * 2 + u128::from(469_393_303_678_674_661_u64);
+        assert_eq!(
+            ratio_as_f64(reported_sum, 3).to_bits(),
+            0x43e5_9ad1_47b5_924a
+        );
+        assert_eq!(ratio_as_f64(1, 3).to_bits(), (1.0_f64 / 3.0).to_bits());
+    }
 }

@@ -58,23 +58,31 @@ fn rejects_integer_summaries_with_tolerance_sized_errors() {
         (1_000_000_000_u64, 1_000_000_001_u64),
         (9_007_199_254_740_992_u64, 9_007_199_254_740_993_u64),
     ] {
-        let mut report = successful_report();
-        for sample in &mut report["measurements"][1]["samples"].as_array_mut().unwrap()[1..] {
-            sample["value"] = Value::from(observation);
-        }
-        let statistics = &mut report["measurements"][1]["statistics"];
+        let report = constant_proof_size_report(observation);
         for field in ["minimum", "maximum", "median", "mean"] {
-            statistics[field] = Value::from(incorrect_summary);
+            let mut incorrect = report.clone();
+            incorrect["measurements"][1]["statistics"][field] = Value::from(incorrect_summary);
+            assert!(
+                rejects(incorrect),
+                "accepted incorrect {field} {incorrect_summary} for exact observation {observation}"
+            );
         }
-        statistics["standard_deviation"] = Value::from(0);
-        statistics["percentiles"]["p50"] = Value::from(incorrect_summary);
-        statistics["percentiles"]["p95"] = Value::from(incorrect_summary);
-
-        assert!(
-            rejects(report),
-            "accepted {incorrect_summary} for exact observation {observation}"
-        );
     }
+}
+
+fn constant_proof_size_report(observation: u64) -> Value {
+    let mut report = successful_report();
+    for sample in &mut report["measurements"][1]["samples"].as_array_mut().unwrap()[1..] {
+        sample["value"] = Value::from(observation);
+    }
+    let statistics = &mut report["measurements"][1]["statistics"];
+    for field in ["minimum", "maximum", "median", "mean"] {
+        statistics[field] = Value::from(observation);
+    }
+    statistics["standard_deviation"] = Value::from(0);
+    statistics["percentiles"]["p50"] = Value::from(observation);
+    statistics["percentiles"]["p95"] = Value::from(observation);
+    report
 }
 
 #[test]
@@ -94,6 +102,42 @@ fn accepts_non_terminating_mean() {
     statistics["standard_deviation"] = Value::from((1.0_f64 / 3.0).sqrt());
     statistics["percentiles"]["p50"] = Value::from(0);
     statistics["percentiles"]["p95"] = Value::from(0.9);
+
+    assert!(!rejects(report));
+}
+
+#[test]
+fn accepts_negative_zero_mean() {
+    let mut report = constant_proof_size_report(0);
+    report["measurements"][1]["statistics"]["mean"] = serde_json::from_str("-0.0").unwrap();
+
+    assert!(!rejects(report));
+}
+
+#[test]
+fn accepts_single_rounded_large_rational_mean() {
+    let mut report = successful_report();
+    let values = [u64::MAX, u64::MAX, 469_393_303_678_674_661];
+    for (sample, value) in report["measurements"][1]["samples"].as_array_mut().unwrap()[1..]
+        .iter_mut()
+        .zip(values)
+    {
+        sample["value"] = Value::from(value);
+    }
+    let mean = f64::from_bits(0x43e5_9ad1_47b5_924a);
+    let float_values = values.map(|value| value.to_string().parse::<f64>().unwrap());
+    let squared_error = float_values
+        .iter()
+        .map(|value| (value - mean).powi(2))
+        .sum::<f64>();
+    let statistics = &mut report["measurements"][1]["statistics"];
+    statistics["minimum"] = Value::from(values[2]);
+    statistics["maximum"] = Value::from(u64::MAX);
+    statistics["median"] = Value::from(u64::MAX);
+    statistics["mean"] = Value::from(mean);
+    statistics["standard_deviation"] = Value::from((squared_error / 2.0).sqrt());
+    statistics["percentiles"]["p50"] = Value::from(u64::MAX);
+    statistics["percentiles"]["p95"] = Value::from(u64::MAX);
 
     assert!(!rejects(report));
 }
