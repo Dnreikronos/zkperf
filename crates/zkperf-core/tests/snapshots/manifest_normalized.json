@@ -1,0 +1,70 @@
+{
+  "manifest_path": "$FIXTURE_ROOT/zkperf.toml",
+  "manifest_version": "1.0.0",
+  "run": {
+    "warmups": 1,
+    "runs": 3,
+    "timeouts": [
+      {
+        "phase": "execution",
+        "limit_ms": 30000,
+        "termination_grace_ms": 1000
+      },
+      {
+        "phase": "proving",
+        "limit_ms": 300000,
+        "termination_grace_ms": 5000
+      },
+      {
+        "phase": "verification",
+        "limit_ms": 30000,
+        "termination_grace_ms": 1000
+      }
+    ]
+  },
+  "outputs": {
+    "directory": "$FIXTURE_ROOT/results",
+    "formats": [
+      "json",
+      "terminal"
+    ]
+  },
+  "workloads": [
+    {
+      "id": "sha256",
+      "revision": "fixture-v1",
+      "specification": "$FIXTURE_ROOT/workload.md",
+      "implementation_lane": "portable",
+      "security_target_bits": 128,
+      "phases": [
+        "execution",
+        "proving",
+        "verification"
+      ],
+      "inputs": [
+        {
+          "id": "small",
+          "fixture": "$FIXTURE_ROOT/input.bin",
+          "expected_output": "$FIXTURE_ROOT/output.bin",
+          "visibility": "private",
+          "preprocessing": "none",
+          "commit_input": "digest",
+          "commit_output": "bytes"
+        }
+      ]
+    }
+  ],
+  "engines": [
+    {
+      "id": "mock",
+      "adapter": "$FIXTURE_ROOT/mock.zkperf-adapter.json",
+      "proof_modes": [
+        "default"
+      ],
+      "configuration": {
+        "backend": "cpu",
+        "workers": 1
+      }
+    }
+  ]
+}

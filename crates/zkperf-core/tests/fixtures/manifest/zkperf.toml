@@ -1,0 +1,50 @@
+manifest_version = "1.0.0"
+
+[run]
+warmups = 1
+runs = 3
+
+[[run.timeouts]]
+phase = "execution"
+limit_ms = 30_000
+termination_grace_ms = 1_000
+
+[[run.timeouts]]
+phase = "proving"
+limit_ms = 300_000
+termination_grace_ms = 5_000
+
+[[run.timeouts]]
+phase = "verification"
+limit_ms = 30_000
+termination_grace_ms = 1_000
+
+[outputs]
+directory = "results"
+formats = ["json", "terminal"]
+
+[[workloads]]
+id = "sha256"
+revision = "fixture-v1"
+specification = "workload.md"
+implementation_lane = "portable"
+security_target_bits = 128
+phases = ["execution", "proving", "verification"]
+
+[[workloads.inputs]]
+id = "small"
+fixture = "input.bin"
+expected_output = "output.bin"
+visibility = "private"
+preprocessing = "none"
+commit_input = "digest"
+commit_output = "bytes"
+
+[[engines]]
+id = "mock"
+adapter = "mock.zkperf-adapter.json"
+proof_modes = ["default"]
+
+[engines.configuration]
+workers = 1
+backend = "cpu"
