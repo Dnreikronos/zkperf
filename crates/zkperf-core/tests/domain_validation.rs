@@ -197,6 +197,24 @@ fn rejects_disconnected_schedule_and_attempt_graph() {
     let mut wrong_rate = successful_report();
     wrong_rate["measurements"][0]["statistics"]["rates"]["failure"] = Value::from(0.5);
     assert!(rejects(wrong_rate));
+
+    let mut missing_same_engine_attempt = successful_report();
+    let mut extra_job = missing_same_engine_attempt["run"]["planned_order"][3].clone();
+    extra_job["position"] = Value::from(4);
+    extra_job["attempt_index"] = Value::from(4);
+    missing_same_engine_attempt["run"]["planned_order"]
+        .as_array_mut()
+        .unwrap()
+        .push(extra_job.clone());
+    assert!(rejects(missing_same_engine_attempt));
+
+    let mut other_engine_job = successful_report();
+    extra_job["engine_id"] = Value::String("other_engine".to_owned());
+    other_engine_job["run"]["planned_order"]
+        .as_array_mut()
+        .unwrap()
+        .push(extra_job);
+    assert!(!rejects(other_engine_job));
 }
 
 #[test]

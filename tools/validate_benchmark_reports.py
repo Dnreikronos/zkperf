@@ -419,6 +419,20 @@ def _semantic_issues(report: dict[str, Any]) -> list[str]:
 
     outcome = report["status"]["outcome"]
     statuses = Counter(identity["status"] for identity in attempts.values())
+    if outcome == "successful":
+        observed_positions = {
+            identity["schedule_position"] for identity in attempts.values()
+        }
+        engine_id = report["engine"]["id"]
+        for index, planned in enumerate(report["run"]["planned_order"]):
+            if (
+                planned["engine_id"] == engine_id
+                and planned["position"] not in observed_positions
+            ):
+                issues.append(
+                    f"semantic /run/planned_order/{index}: "
+                    "successful report lacks an observation"
+                )
     unavailable = any(
         measurement["availability"] == "unavailable"
         for measurement in report["measurements"]

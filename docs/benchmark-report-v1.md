@@ -71,7 +71,8 @@ benchmark durations.
 The planned schedule MUST be saved before the first attempt. Every raw sample's
 `schedule_position`, `attempt_index`, `warmup`, and `phase` MUST match one
 planned entry. A sample may be present in several metrics through its shared
-`attempt_id`; its metric-local `id` remains unique.
+`attempt_id`; its metric-local `id` remains unique. A successful report MUST
+retain at least one raw sample for every planned entry belonging to its engine.
 
 `run.policy` records ordering, concurrency, retry, invalidation, outlier, and
 percentile choices. Metric-specific warm-up count, measured-trial count, and

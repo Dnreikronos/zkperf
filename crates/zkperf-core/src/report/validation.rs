@@ -109,6 +109,7 @@ pub(super) fn validate_report(parts: &BenchmarkReportV1Parts) -> Result<(), Repo
     validate_replacements(&attempts)?;
     validate_proof_sizes(&proof_required, &proof_sizes)?;
     validate_attempt_references(parts, &attempts)?;
+    validate_schedule_coverage(parts, &attempts)?;
     validate_report_status(parts, &attempts)
 }
 
@@ -151,6 +152,29 @@ fn validate_schedule_reference(
     }
     if planned.warmup != observation.identity.is_warmup() {
         return invalid(format!("{path}: warm-up flag does not match schedule"));
+    }
+    Ok(())
+}
+
+fn validate_schedule_coverage(
+    parts: &BenchmarkReportV1Parts,
+    attempts: &HashMap<AttemptId, AttemptSignature>,
+) -> Result<(), ReportError> {
+    if !matches!(&parts.status, ReportStatus::Successful) {
+        return Ok(());
+    }
+    let observed_positions: HashSet<_> = attempts
+        .values()
+        .map(|attempt| attempt.schedule_position)
+        .collect();
+    for (index, planned) in parts.run.planned_order.iter().enumerate() {
+        if &planned.engine_id == parts.engine.id()
+            && !observed_positions.contains(&planned.position)
+        {
+            return invalid(format!(
+                "/run/planned_order/{index}: successful report lacks an observation"
+            ));
+        }
     }
     Ok(())
 }

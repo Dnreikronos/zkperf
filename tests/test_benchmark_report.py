@@ -111,6 +111,23 @@ class BenchmarkReportTests(unittest.TestCase):
 
         self.assertEqual([], validate_report(report, self.schema))
 
+    def test_successful_report_requires_same_engine_schedule_coverage(self) -> None:
+        report = json.loads((REPORTS / "successful.json").read_text())
+        extra_job = copy.deepcopy(report["run"]["planned_order"][-1])
+        extra_job.update({"position": 4, "attempt_index": 4})
+        report["run"]["planned_order"].append(extra_job)
+        self.assertTrue(
+            any(
+                "/run/planned_order/4: successful report lacks an observation" in issue
+                for issue in validate_report(report, self.schema)
+            )
+        )
+
+        other_engine = json.loads((REPORTS / "successful.json").read_text())
+        extra_job["engine_id"] = "other_engine"
+        other_engine["run"]["planned_order"].append(extra_job)
+        self.assertEqual([], validate_report(other_engine, self.schema))
+
     def test_phase_specific_success_correctness(self) -> None:
         base = json.loads((REPORTS / "successful.json").read_text())
         for phase_name in ("execution", "build"):
