@@ -12,3 +12,7 @@
 - Diagnostic artifact failures must not erase a structured adapter failure.
   Test both unreadable files and hash mismatches; they fail at different points
   in supervision and evidence storage.
+- Runtime metadata must use the configuration after defaults and CLI overrides.
+  Keep that resolved configuration before filtering settings for an operation;
+  otherwise metadata can lose settings targeted at a later stage. Test both
+  active overrides and overrides intended for another stage.
