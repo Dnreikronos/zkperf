@@ -2,9 +2,13 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 
-use super::RunError;
+use super::{ARTIFACT_INDEX, PLAN_SNAPSHOT, RUN_RECORD, RunError};
 
 const MAX_SEGMENT_BYTES: usize = 255;
+
+/// Files the run directory keeps writing to. Handing one of them out as an
+/// artifact would publish a digest that the next write invalidates.
+const RESERVED_RUN_FILES: [&str; 3] = [RUN_RECORD, PLAN_SNAPSHOT, ARTIFACT_INDEX];
 
 /// Windows opens these names as devices regardless of the directory they
 /// appear in, so they are rejected on every platform for one portable layout.
@@ -60,6 +64,13 @@ pub(super) fn segments(relative: &str) -> Result<Vec<&str>, RunError> {
             ));
         }
         segments.push(segment);
+    }
+
+    if segments.len() == 1 && RESERVED_RUN_FILES.contains(&segments[0]) {
+        return Err(RunError::invalid_path(
+            relative,
+            "names a file the run directory keeps writing to",
+        ));
     }
     Ok(segments)
 }
@@ -204,7 +215,22 @@ mod tests {
             segments("attempts/0000000001-0000/outputs/proof.bin").unwrap(),
             ["attempts", "0000000001-0000", "outputs", "proof.bin"]
         );
-        assert_eq!(segments("run.json").unwrap(), ["run.json"]);
+        assert_eq!(
+            segments("reports/report.json").unwrap(),
+            ["reports", "report.json"]
+        );
         assert_eq!(segments("logs/.hidden").unwrap(), ["logs", ".hidden"]);
+    }
+
+    #[test]
+    fn files_the_run_directory_maintains_are_not_artifact_targets() {
+        for relative in ["run.json", "plan.json", "artifacts.jsonl"] {
+            assert!(
+                segments(relative).is_err(),
+                "{relative} changes after it would be hashed"
+            );
+        }
+        // Only the run root owns those names.
+        assert!(segments("logs/run.json").is_ok());
     }
 }

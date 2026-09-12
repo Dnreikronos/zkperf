@@ -330,6 +330,28 @@ fn an_output_directory_linked_after_loading_cannot_host_a_run() {
 }
 
 #[test]
+fn files_the_run_keeps_writing_cannot_become_artifacts() {
+    let fixture = Fixture::new(SOURCE);
+    let plan = fixture.plan();
+    let mut run = RunDirectory::create(&plan).unwrap();
+
+    for path in ["run.json", "plan.json", "artifacts.jsonl"] {
+        let adopted = run.adopt(&request(path, ArtifactKind::Other)).unwrap_err();
+        let stored = run
+            .store(&request(path, ArtifactKind::Other), b"replacement")
+            .unwrap_err();
+        assert!(matches!(adopted, RunError::InvalidPath { .. }), "{adopted}");
+        assert!(matches!(stored, RunError::InvalidPath { .. }), "{stored}");
+    }
+
+    assert!(run.artifacts().is_empty());
+    assert_eq!(
+        fs::read_to_string(run.path().join("artifacts.jsonl")).unwrap(),
+        ""
+    );
+}
+
+#[test]
 fn stored_and_adopted_artifacts_carry_report_integrity_hashes() {
     let fixture = Fixture::new(SOURCE);
     let plan = fixture.plan();
