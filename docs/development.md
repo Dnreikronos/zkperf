@@ -34,6 +34,8 @@ zkperf-cli  ->  zkperf-core  ->  zkperf-adapter-protocol
 ```
 
 - `zkperf-cli` owns user interaction and delegates work to the core.
+  It uses Clap for the [CLI contract](cli.md), with `serde_json` only as a test
+  dependency for checking normalized configuration output.
 - `zkperf-core` owns engine-independent orchestration.
 - `zkperf-adapter-protocol` owns only the shared subprocess contract.
 - Engine adapters run out of process. They may depend on their zkVM SDK and the
