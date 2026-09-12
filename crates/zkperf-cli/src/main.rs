@@ -20,8 +20,12 @@ fn main() -> ExitCode {
     match run(cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            let _ = error.emit(&mut io::stderr().lock());
-            ExitCode::from(error.exit_code)
+            let status = if error.emit(&mut io::stderr().lock()).is_ok() {
+                error.exit_code
+            } else {
+                4
+            };
+            ExitCode::from(status)
         }
     }
 }

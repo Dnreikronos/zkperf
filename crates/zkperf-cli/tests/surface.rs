@@ -180,6 +180,33 @@ fn report_and_compare_validate_only_their_relevant_environment() {
 
 #[cfg(unix)]
 #[test]
+fn diagnostic_write_failures_override_the_original_error_status() {
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
+    use std::process::Stdio;
+
+    for (args, original_status) in [
+        (vec!["--quiet", "validate", "--manifest", "missing.toml"], 3),
+        (vec!["--quiet", "init"], 5),
+    ] {
+        let normal = command().args(&args).output().unwrap();
+        assert_status(&normal, original_status);
+        assert!(!normal.stderr.is_empty());
+
+        let (writer, reader) = UnixStream::pair().unwrap();
+        drop(reader);
+        let output = command()
+            .args(&args)
+            .stderr(Stdio::from(OwnedFd::from(writer)))
+            .output()
+            .unwrap();
+        assert_status(&output, 4);
+        assert!(output.stdout.is_empty());
+    }
+}
+
+#[cfg(unix)]
+#[test]
 fn a_closed_stdout_returns_io_status_without_panicking() {
     use std::os::fd::OwnedFd;
     use std::os::unix::net::UnixStream;
