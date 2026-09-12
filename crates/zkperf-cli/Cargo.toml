@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+ctrlc.workspace = true
 zkperf-core.workspace = true
 
 [dev-dependencies]

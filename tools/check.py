@@ -16,6 +16,8 @@ EXPECTED_DIRECT_DEPENDENCIES = {
         "cap-std",
         "cap-fs-ext",
         "chrono",
+        "jsonschema",
+        "process-wrap",
         "semver",
         "serde",
         "serde_json",
@@ -26,7 +28,7 @@ EXPECTED_DIRECT_DEPENDENCIES = {
         "uuid",
         "zkperf-adapter-protocol",
     },
-    "zkperf-cli": {"clap", "serde_json", "zkperf-core"},
+    "zkperf-cli": {"clap", "ctrlc", "serde_json", "zkperf-core"},
 }
 
 
