@@ -33,16 +33,7 @@ impl BenchmarkPlan {
             .map_err(|_| PlanError::TooManyJobs)?;
         let files = provenance::collect(&manifest)?;
         let definition = serde_json::to_vec(&("zkperf-plan-v1", &manifest, &files))?;
-        let id: String = Sha256::digest(definition)
-            .iter()
-            .flat_map(|byte| {
-                const HEX: &[u8; 16] = b"0123456789abcdef";
-                [
-                    char::from(HEX[usize::from(byte >> 4)]),
-                    char::from(HEX[usize::from(byte & 15)]),
-                ]
-            })
-            .collect();
+        let id = crate::digest::encode_hex(&crate::digest::hash_bytes(&definition));
         let engines = ordered_engines(&manifest);
         for (warmup, repetitions) in [
             (true, manifest.run().warmups()),

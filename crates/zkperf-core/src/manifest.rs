@@ -7,16 +7,14 @@ pub use overrides::ManifestOverrides;
 
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::fmt::{self, Display, Formatter, Write as _};
-use std::fs::File;
-use std::io::{self, Read};
+use std::fmt::{self, Display, Formatter};
+use std::io;
 use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
 use crate::{
     Commitment, ImplementationLane, InputVisibility, NonEmptyString, Resources, RunPolicy,
@@ -478,35 +476,9 @@ impl ResolvedFile {
     /// Returns an I/O error annotated with the resolved file path when reading
     /// fails.
     pub fn sha256(&self) -> Result<Sha256Digest, FixtureHashError> {
-        let mut file =
-            File::open(&self.0).map_err(|source| FixtureHashError::new(self.0.clone(), source))?;
-        let mut hasher = Sha256::new();
-        let mut buffer = [0_u8; 16 * 1024];
-
-        loop {
-            let read = file
-                .read(&mut buffer)
-                .map_err(|source| FixtureHashError::new(self.0.clone(), source))?;
-            if read == 0 {
-                break;
-            }
-            hasher.update(&buffer[..read]);
-        }
-
-        let digest = hasher.finalize();
-        let mut encoded = String::with_capacity(64);
-        for byte in digest {
-            write!(&mut encoded, "{byte:02x}").map_err(|_| {
-                FixtureHashError::new(
-                    self.0.clone(),
-                    io::Error::other("failed to encode SHA-256 digest"),
-                )
-            })?;
-        }
-
-        Sha256Digest::new(encoded).map_err(|error| {
-            FixtureHashError::new(self.0.clone(), io::Error::other(error.to_string()))
-        })
+        crate::digest::hash_file(&self.0)
+            .map(|(digest, _)| digest)
+            .map_err(|source| FixtureHashError::new(self.0.clone(), source))
     }
 }
 

@@ -1,5 +1,6 @@
 //! Engine-independent benchmark orchestration primitives.
 
+mod digest;
 mod init;
 mod manifest;
 mod measurement;
