@@ -168,21 +168,27 @@ pub fn run_operation(
             .errors
             .push("missing or oversized protocol stdout".into());
     }
-    if result.record.outcome == OperationOutcome::Success {
-        let response = result
-            .response
-            .as_ref()
-            .ok_or_else(|| wire::invalid("response missing"))?;
-        result.record.outcome = match response["status"].as_str().unwrap_or("error") {
-            "success" => OperationOutcome::Success,
-            "unsupported" => OperationOutcome::Unsupported,
-            _ => OperationOutcome::AdapterError,
-        };
-        match evidence::artifacts(run, workspace, invocation, response) {
-            Ok(artifacts) => result.artifacts = artifacts,
-            Err(error) => {
-                result.record.outcome = OperationOutcome::ArtifactError;
-                result.record.errors.push(error.to_string());
+    if matches!(
+        result.record.outcome,
+        OperationOutcome::Success | OperationOutcome::ArtifactError
+    ) {
+        if let Some(response) = &result.response {
+            let artifacts_readable = result.record.outcome == OperationOutcome::Success;
+            result.record.outcome = match response["status"].as_str().unwrap_or("error") {
+                "success" => result.record.outcome,
+                "unsupported" => OperationOutcome::Unsupported,
+                _ => OperationOutcome::AdapterError,
+            };
+            if artifacts_readable {
+                match evidence::artifacts(run, workspace, invocation, response) {
+                    Ok(artifacts) => result.artifacts = artifacts,
+                    Err(error) => {
+                        if result.record.outcome == OperationOutcome::Success {
+                            result.record.outcome = OperationOutcome::ArtifactError;
+                        }
+                        result.record.errors.push(error.to_string());
+                    }
+                }
             }
         }
     }

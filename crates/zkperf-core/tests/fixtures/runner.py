@@ -160,6 +160,20 @@ if mode in {"error", "unsupported", "graceful"}:
     response["status"] = "unsupported" if mode == "unsupported" else "error"
     response["error"] = {"phase": "capabilities", "code": "cancelled",
                          "message": "fixture failure", "retryable": False}
+if mode.startswith("artifact-diagnostic-"):
+    status, problem = mode.removeprefix("artifact-diagnostic-").split("-")
+    response["status"] = status
+    if status != "success":
+        response.pop("result", None)
+        response["error"] = {"phase": "capabilities", "code": "fixture_failure",
+                             "message": "fixture failure", "retryable": False}
+    response["artifacts"] = [{
+        "id": "diagnostic", "kind": "other", "path": "outputs/diagnostic",
+        "media_type": "application/octet-stream", "byte_length": 4,
+        "digest": {"algorithm": "sha256", "value": hashlib.sha256(b"lost").hexdigest()},
+    }]
+    if problem == "digest":
+        Path("outputs/diagnostic").write_bytes(b"kept")
 print(json.dumps(response))
 if mode == "trailing":
     print("{}")
