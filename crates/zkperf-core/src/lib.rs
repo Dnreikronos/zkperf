@@ -7,6 +7,7 @@ mod measurement;
 mod metadata;
 mod plan;
 mod report;
+mod run;
 mod sample;
 mod types;
 
@@ -40,6 +41,9 @@ pub use report::{
     Artifact, ArtifactKind, ArtifactParts, BenchmarkJob, BenchmarkReport, BenchmarkReportV1,
     BenchmarkReportV1Parts, CompatibilityMetadata, ReportError, ReportStatus, RunMetadata,
     RunMetadataParts, Warning,
+};
+pub use run::{
+    ArtifactRequest, RunDirectory, RunError, RunOutcome, RunRecord, RunState, RunWorkspace,
 };
 pub use sample::{
     Correctness, DurationObservation, DurationOutcome, ExecutionCorrectness,
