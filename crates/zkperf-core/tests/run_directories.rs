@@ -281,6 +281,54 @@ fn symbolic_links_inside_a_run_directory_are_refused() {
     assert_eq!(entries(&outside), [] as [String; 0]);
 }
 
+#[cfg(unix)]
+#[test]
+fn a_run_root_swapped_for_a_link_stops_every_write() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = Fixture::new(SOURCE);
+    let plan = fixture.plan();
+    let mut run = RunDirectory::create(&plan).unwrap();
+    let outside = fixture.0.join("outside");
+    fs::create_dir(&outside).unwrap();
+
+    let root = run.path().to_path_buf();
+    fs::remove_dir_all(&root).unwrap();
+    symlink(&outside, &root).unwrap();
+
+    for error in [
+        run.store(&request("logs/harness.log", ArtifactKind::Log), b"escaped")
+            .unwrap_err(),
+        run.open_new("logs/adapter.log").unwrap_err(),
+        run.attempt(&plan.jobs()[0], 0).unwrap_err(),
+    ] {
+        assert!(matches!(error, RunError::SymbolicLink(_)), "{error}");
+    }
+    assert!(matches!(
+        run.finish(RunOutcome::Completed),
+        Err(RunError::SymbolicLink(_))
+    ));
+    assert_eq!(entries(&outside), [] as [String; 0]);
+}
+
+#[cfg(unix)]
+#[test]
+fn an_output_directory_linked_after_loading_cannot_host_a_run() {
+    use std::os::unix::fs::symlink;
+
+    let fixture = Fixture::new(SOURCE);
+    let plan = fixture.plan();
+    let outside = fixture.0.join("outside");
+    fs::create_dir(&outside).unwrap();
+    // The manifest resolved "results" while it was still missing.
+    symlink(&outside, fixture.results()).unwrap();
+
+    let error = RunDirectory::create(&plan).unwrap_err();
+
+    assert!(matches!(error, RunError::SymbolicLink(_)), "{error}");
+    assert_eq!(entries(&outside), [] as [String; 0]);
+}
+
 #[test]
 fn stored_and_adopted_artifacts_carry_report_integrity_hashes() {
     let fixture = Fixture::new(SOURCE);

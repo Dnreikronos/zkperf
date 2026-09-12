@@ -74,8 +74,17 @@ impl RunDirectory {
             ],
         ));
 
-        let parent = plan.manifest().outputs().directory();
-        fs::create_dir_all(parent).map_err(|error| RunError::io(parent, error))?;
+        // The manifest checked its output directory when it was loaded. A link
+        // planted since then would put this run somewhere else entirely, so
+        // the suite root is confirmed again and every level below it is
+        // created here rather than trusted.
+        let manifest_path = plan.manifest().manifest_path();
+        let suite = manifest_path
+            .parent()
+            .ok_or_else(|| RunError::Escapes(manifest_path.to_path_buf()))?;
+        let suite = fs::canonicalize(suite).map_err(|error| RunError::io(suite, error))?;
+        let parent = paths::create_output_directory(&suite, plan.manifest().outputs().directory())?;
+
         let path = parent.join(format!("{}-{run_id}", started_at.file_stamp()));
         fs::create_dir(&path).map_err(|error| {
             if error.kind() == ErrorKind::AlreadyExists {
@@ -84,8 +93,11 @@ impl RunDirectory {
                 RunError::io(&path, error)
             }
         })?;
+        let path = fs::canonicalize(&path).map_err(|error| RunError::io(&path, error))?;
+        if !path.starts_with(&suite) {
+            return Err(RunError::Escapes(path));
+        }
 
-        let manifest_path = plan.manifest().manifest_path();
         let (manifest_digest, _) = crate::digest::hash_file(manifest_path)
             .map_err(|error| RunError::io(manifest_path, error))?;
         let index = write::create_new(&path.join(ARTIFACT_INDEX))?;
@@ -245,6 +257,7 @@ impl RunDirectory {
     /// Returns an error when the system clock is unusable or the record cannot
     /// be published.
     pub fn finish(mut self, outcome: RunOutcome) -> Result<RunRecord, RunError> {
+        paths::verify_root(&self.path)?;
         let finished_at = Timestamp::now()?;
         self.index
             .sync_all()
@@ -406,6 +419,8 @@ pub enum RunError {
     InvalidPath { path: String, reason: &'static str },
     AlreadyExists(PathBuf),
     SymbolicLink(PathBuf),
+    Escapes(PathBuf),
+    Relocated(PathBuf),
     NotADirectory(PathBuf),
     NotARegularFile(PathBuf),
     Io { path: PathBuf, source: io::Error },
@@ -447,6 +462,16 @@ impl Display for RunError {
                 "{} is a symbolic link and could leave the run directory",
                 path.display()
             ),
+            Self::Escapes(path) => write!(
+                formatter,
+                "{} resolves outside the benchmark manifest directory",
+                path.display()
+            ),
+            Self::Relocated(path) => write!(
+                formatter,
+                "{} no longer resolves to the directory the run created",
+                path.display()
+            ),
             Self::NotADirectory(path) => {
                 write!(formatter, "{} is not a directory", path.display())
             }
@@ -468,6 +493,8 @@ impl Error for RunError {
             Self::InvalidPath { .. }
             | Self::AlreadyExists(_)
             | Self::SymbolicLink(_)
+            | Self::Escapes(_)
+            | Self::Relocated(_)
             | Self::NotADirectory(_)
             | Self::NotARegularFile(_) => None,
             Self::Io { source, .. } => Some(source),
