@@ -5,7 +5,7 @@ use std::path::{Component, Path, PathBuf};
 use cap_fs_ext::{DirExt, MetadataExt};
 use cap_std::{ambient_authority, fs::Dir};
 
-use super::{ARTIFACT_INDEX, PLAN_SNAPSHOT, RUN_RECORD, RunError};
+use super::{ARTIFACT_INDEX, PLAN_SNAPSHOT, RUN_RECORD, RunError, SNAPSHOTS};
 
 const MAX_SEGMENT_BYTES: usize = 255;
 
@@ -69,6 +69,12 @@ pub(super) fn segments(relative: &str) -> Result<Vec<&str>, RunError> {
         segments.push(segment);
     }
 
+    if segments[0].eq_ignore_ascii_case(SNAPSHOTS) {
+        return Err(RunError::invalid_path(
+            relative,
+            "names the run's artifact snapshot storage",
+        ));
+    }
     if segments.len() == 1
         && RESERVED_RUN_FILES
             .iter()

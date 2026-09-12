@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{ErrorKind, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -38,9 +38,33 @@ fn create_file(directory: &Dir, name: &str, path: &Path) -> Result<File, RunErro
 /// success while replacing that writer's evidence.
 pub(super) fn publish_new(path: &RunPath, contents: &[u8]) -> Result<(), RunError> {
     let temporary = write_temporary(path, contents)?;
+    publish_temporary(path, &temporary)
+}
+
+/// Publishes a separate inode containing exactly the bytes that were hashed.
+pub(super) fn snapshot(
+    path: &RunPath,
+    reader: &mut impl Read,
+) -> Result<(crate::Sha256Digest, crate::ByteSize), RunError> {
+    let (temporary, mut file) = create_temporary(&path.directory, &path.path)?;
+    let result = crate::digest::copy_and_hash(reader, &mut file)
+        .and_then(|integrity| file.sync_all().map(|()| integrity));
+    drop(file);
+    let integrity = match result {
+        Ok(integrity) => integrity,
+        Err(error) => {
+            drop(path.directory.remove_file(&temporary));
+            return Err(RunError::io(&path.path, error));
+        }
+    };
+    publish_temporary(path, &temporary)?;
+    Ok(integrity)
+}
+
+fn publish_temporary(path: &RunPath, temporary: &str) -> Result<(), RunError> {
     let result = path
         .directory
-        .hard_link(&temporary, &path.directory, &path.name)
+        .hard_link(temporary, &path.directory, &path.name)
         .map_err(|error| {
             if error.kind() == ErrorKind::AlreadyExists {
                 RunError::AlreadyExists(path.path.clone())
@@ -49,7 +73,7 @@ pub(super) fn publish_new(path: &RunPath, contents: &[u8]) -> Result<(), RunErro
             }
         });
     // The published name now has its own link to the completed contents.
-    drop(path.directory.remove_file(&temporary));
+    drop(path.directory.remove_file(temporary));
     result?;
     sync_directory(&path.directory, &path.path)
 }

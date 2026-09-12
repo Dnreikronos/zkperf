@@ -35,6 +35,8 @@ const PLAN_SNAPSHOT: &str = "plan.json";
 const ARTIFACT_INDEX: &str = "artifacts.jsonl";
 /// The parent of every per-attempt adapter workspace.
 const ATTEMPTS: &str = "attempts";
+/// Host-owned copies, separate from producer paths and writable handles.
+const SNAPSHOTS: &str = ".zkperf-artifacts";
 
 /// A run directory that no other run may write to or replace.
 ///
@@ -168,6 +170,7 @@ impl RunDirectory {
         paths::validate(&request.path)?;
         let artifact = self.artifact(
             request,
+            &request.path,
             Sha256Digest::from_bytes(crate::digest::hash_bytes(contents)),
             ByteSize::new(contents.len() as u64),
         )?;
@@ -176,11 +179,12 @@ impl RunDirectory {
         self.commit(&request.path, artifact)
     }
 
-    /// Records an existing file inside the run directory as an artifact.
+    /// Snapshots an existing file inside the run directory as an artifact.
     ///
     /// This is how adapter-produced evidence, such as a proof written into an
-    /// attempt's outputs root, enters the run's provenance without being
-    /// copied or rewritten.
+    /// attempt's outputs root, enters the run's provenance. The recorded URI
+    /// addresses a host-owned copy, so later producer writes or replacements
+    /// do not invalidate its integrity hash.
     ///
     /// # Errors
     ///
@@ -188,6 +192,13 @@ impl RunDirectory {
     /// already recorded, is not a regular file, or cannot be hashed.
     pub fn adopt(&mut self, request: &ArtifactRequest) -> Result<Artifact, RunError> {
         let path = paths::resolve(&self.directory, &self.path, &request.path)?;
+        // Validate metadata and duplicate requests before publishing a snapshot.
+        self.artifact(
+            request,
+            &request.path,
+            Sha256Digest::from_bytes([0; 32]),
+            ByteSize::new(0),
+        )?;
         let mut options = OpenOptions::new();
         // Validate the opened object without waiting for a FIFO writer first.
         options.read(true).follow(FollowSymlinks::No).nonblock(true);
@@ -202,9 +213,14 @@ impl RunDirectory {
         {
             return Err(RunError::NotARegularFile(path.path));
         }
-        let (digest, byte_length) = crate::digest::hash_reader(&mut file)
-            .map_err(|error| RunError::io(&path.path, error))?;
-        let artifact = self.artifact(request, digest, byte_length)?;
+        let snapshots_path = self.path.join(SNAPSHOTS);
+        let snapshots =
+            paths::create_directory(&self.directory, SNAPSHOTS.as_ref(), &snapshots_path)?;
+        let name = self.artifact_id(request).to_string();
+        let destination = RunPath::at(&snapshots, &snapshots_path, &name)?;
+        let (digest, byte_length) = write::snapshot(&destination, &mut file)?;
+        let uri = format!("{SNAPSHOTS}/{name}");
+        let artifact = self.artifact(request, &uri, digest, byte_length)?;
         self.commit(&request.path, artifact)
     }
 
@@ -292,6 +308,7 @@ impl RunDirectory {
     fn artifact(
         &self,
         request: &ArtifactRequest,
+        uri: &str,
         digest: Sha256Digest,
         byte_length: ByteSize,
     ) -> Result<Artifact, RunError> {
@@ -299,19 +316,23 @@ impl RunDirectory {
             return Err(RunError::AlreadyExists(self.path.join(&request.path)));
         }
         Artifact::new(ArtifactParts {
-            id: ArtifactId::new(derive(
-                b"zkperf-artifact-id-v1",
-                &[self.id().get().as_bytes(), request.path.as_bytes()],
-            )),
+            id: self.artifact_id(request),
             name: request.name.clone(),
             kind: request.kind,
-            uri: UriReference::new(request.path.clone())?,
+            uri: UriReference::new(uri.to_owned())?,
             media_type: request.media_type.clone(),
             byte_length,
             digest,
             attempt_id: request.attempt_id,
         })
         .map_err(RunError::Artifact)
+    }
+
+    fn artifact_id(&self, request: &ArtifactRequest) -> ArtifactId {
+        ArtifactId::new(derive(
+            b"zkperf-artifact-id-v1",
+            &[self.id().get().as_bytes(), request.path.as_bytes()],
+        ))
     }
 
     fn commit(&mut self, path: &str, artifact: Artifact) -> Result<Artifact, RunError> {

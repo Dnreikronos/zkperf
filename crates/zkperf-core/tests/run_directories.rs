@@ -470,7 +470,10 @@ fn stored_and_adopted_artifacts_carry_report_integrity_hashes() {
         })
         .unwrap();
     let value = serde_json::to_value(&adopted).unwrap();
-    assert_eq!(value["uri"], "attempts/0000000000-0000/outputs/proof.bin");
+    assert_eq!(
+        value["uri"],
+        format!(".zkperf-artifacts/{}", value["id"].as_str().unwrap())
+    );
     assert_eq!(value["byte_length"], produced.len());
     assert_eq!(value["digest"]["value"], sha256_hex(produced));
     assert_eq!(value["attempt_id"], workspace.attempt_id().to_string());
@@ -486,6 +489,54 @@ fn stored_and_adopted_artifacts_carry_report_integrity_hashes() {
         run.adopt(&request("artifacts/proof.bin", ArtifactKind::Proof)),
         Err(RunError::AlreadyExists(_))
     ));
+}
+
+#[test]
+fn adopted_snapshots_survive_producer_writes_and_path_replacement() {
+    let fixture = Fixture::new(SOURCE);
+    let mut run = RunDirectory::create(&fixture.plan()).unwrap();
+    let mut producer = run.open_new("logs/adapter.log").unwrap();
+    producer.write_all(b"original evidence").unwrap();
+    let source = request("logs/adapter.log", ArtifactKind::Other);
+    let artifact = run.adopt(&source).unwrap();
+    let value = serde_json::to_value(&artifact).unwrap();
+    let uri = value["uri"].as_str().unwrap();
+
+    producer.write_all(b" later writes").unwrap();
+    drop(producer);
+    fs::remove_file(run.path().join(&source.path)).unwrap();
+    fs::write(run.path().join(&source.path), b"replacement").unwrap();
+
+    assert_eq!(
+        fs::read(run.path().join(uri)).unwrap(),
+        b"original evidence"
+    );
+    assert_eq!(value["digest"]["value"], sha256_hex(b"original evidence"));
+    assert_eq!(value["byte_length"], b"original evidence".len());
+    assert!(matches!(
+        run.adopt(&source),
+        Err(RunError::AlreadyExists(_))
+    ));
+    for reserved in [uri.to_owned(), uri.to_ascii_uppercase()] {
+        let snapshot = request(&reserved, ArtifactKind::Other);
+        assert!(matches!(
+            run.open_new(&reserved),
+            Err(RunError::InvalidPath { .. })
+        ));
+        assert!(matches!(
+            run.store(&snapshot, b"overwrite"),
+            Err(RunError::InvalidPath { .. })
+        ));
+        assert!(matches!(
+            run.adopt(&snapshot),
+            Err(RunError::InvalidPath { .. })
+        ));
+    }
+    let index = fs::read_to_string(run.path().join("artifacts.jsonl")).unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(index.trim()).unwrap(),
+        value
+    );
 }
 
 #[test]

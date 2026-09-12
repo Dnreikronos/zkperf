@@ -1,7 +1,7 @@
 //! Shared SHA-256 helpers for provenance and artifact integrity.
 
 use std::fs::File;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::path::Path;
 
 use sha2::{Digest, Sha256};
@@ -34,6 +34,14 @@ pub(crate) fn hash_file(path: &Path) -> io::Result<(Sha256Digest, ByteSize)> {
 /// Hashes what an already-open handle reads, so the digest describes the bytes
 /// that were read rather than whatever the path resolves to afterwards.
 pub(crate) fn hash_reader(reader: &mut impl Read) -> io::Result<(Sha256Digest, ByteSize)> {
+    copy_and_hash(reader, &mut io::sink())
+}
+
+/// Copies and hashes the same bytes, even when the producer changes its file.
+pub(crate) fn copy_and_hash(
+    reader: &mut impl Read,
+    writer: &mut impl Write,
+) -> io::Result<(Sha256Digest, ByteSize)> {
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; READ_BUFFER_BYTES];
     let mut byte_length = 0_u64;
@@ -43,6 +51,7 @@ pub(crate) fn hash_reader(reader: &mut impl Read) -> io::Result<(Sha256Digest, B
         if read == 0 {
             break;
         }
+        writer.write_all(&buffer[..read])?;
         hasher.update(&buffer[..read]);
         byte_length = byte_length
             .checked_add(read as u64)
