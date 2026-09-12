@@ -64,6 +64,12 @@ The runner's integration tests require Python 3.10+ (`python3` on Unix, `python`
 on Windows) for subprocess fixtures. Run the focused execution checks with
 `cargo test -p zkperf-core --test subprocess_runner -p zkperf-cli --test execution`.
 
+The [deterministic mock adapter](mock-adapter-v1.md) in `adapters/mock/` is a
+standalone Python standard-library implementation of all protocol operations.
+Generate its runnable benchmark with `python3 tools/create_mock_fixture.py DIR`.
+Its conformance tests need only the existing development dependencies, and its
+CLI tests are included in `cargo test -p zkperf-cli --test mock_adapter`.
+
 ## One-command verification
 
 Install the development prerequisites once:
