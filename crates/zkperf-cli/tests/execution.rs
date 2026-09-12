@@ -1,3 +1,5 @@
+#[path = "execution/regressions.rs"]
+mod regressions;
 mod support;
 
 use serde_json::{Value, json};

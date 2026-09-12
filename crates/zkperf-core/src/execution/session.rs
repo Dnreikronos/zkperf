@@ -245,25 +245,33 @@ impl<'a> Session<'a> {
         let capabilities = self.invoke("capabilities", json!({"host":{"name":"zkperf","version":env!("CARGO_PKG_VERSION"),"supported_protocol_versions":["1.0.0"]}}), "capabilities")?;
         super::capabilities::validate(&capabilities, &self.adapter_id)?;
         let limits = &capabilities["limits"];
-        self.invocation.limits.stdout_bytes = self.invocation.limits.stdout_bytes.min(
-            usize::try_from(limits["max_protocol_stdout_bytes"].as_u64().unwrap())
-                .unwrap_or(usize::MAX),
-        );
+        let limit = |name: &str| {
+            limits[name].as_u64().ok_or_else(|| {
+                invalid(&format!(
+                    "capability limit {name} is outside the supported u64 integer range"
+                ))
+            })
+        };
+        self.invocation.limits.stdout_bytes = self
+            .invocation
+            .limits
+            .stdout_bytes
+            .min(usize::try_from(limit("max_protocol_stdout_bytes")?).unwrap_or(usize::MAX));
         self.invocation.limits.artifact_count = self
             .invocation
             .limits
             .artifact_count
-            .min(limits["max_artifact_count"].as_u64().unwrap());
+            .min(limit("max_artifact_count")?);
         self.invocation.limits.artifact_bytes = self
             .invocation
             .limits
             .artifact_bytes
-            .min(limits["max_artifact_bytes"].as_u64().unwrap());
+            .min(limit("max_artifact_bytes")?);
         self.invocation.limits.total_artifact_bytes = self
             .invocation
             .limits
             .total_artifact_bytes
-            .min(limits["max_total_artifact_bytes"].as_u64().unwrap());
+            .min(limit("max_total_artifact_bytes")?);
         self.invocation.graceful_cancellation = capabilities["cancellation"]["graceful"] == true;
         let metadata = self.invoke(
             "metadata",
