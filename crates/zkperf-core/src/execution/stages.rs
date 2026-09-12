@@ -121,13 +121,13 @@ fn prove_and_verify(
         "configuration":configuration,"proof_mode_id":mode["id"],"input_artifacts":inputs}),
         "proving",
     )?;
-    let mut proof = initial.artifact(&initial.result["proof_artifact_id"])?;
+    let mut proof = proof_artifact(&initial, &mode["proof_format"])?;
     for transformation in mode["transformations"].as_array().unwrap() {
         let mut inputs = prepared.to_vec();
         inputs.push(proof);
         let transformed = session.invoke("prove", json!({"stage":"transform","transformation_id":transformation["id"],
             "benchmark":benchmark,"configuration":configuration,"proof_mode_id":mode["id"],"input_artifacts":inputs}), "compression")?;
-        proof = transformed.artifact(&transformed.result["proof_artifact_id"])?;
+        proof = proof_artifact(&transformed, &transformation["output_format"])?;
     }
     if session
         .workload
@@ -147,4 +147,15 @@ fn prove_and_verify(
         }
     }
     Ok(())
+}
+
+fn proof_artifact(output: &InvocationResult, expected_format: &Value) -> Result<Value, RunError> {
+    let proof = output.artifact(&output.result["proof_artifact_id"])?;
+    if proof["media_type"] != *expected_format {
+        return Err(invalid(&format!(
+            "proof media type {} does not match negotiated format {expected_format}",
+            proof["media_type"]
+        )));
+    }
+    Ok(proof)
 }

@@ -82,3 +82,36 @@ fn out_of_range_capability_limits_fail_without_panicking() {
         );
     }
 }
+
+#[test]
+fn proof_formats_must_match_negotiation_before_consuming_the_proof() {
+    for (mode, expected_format, transformed) in [
+        (
+            "bad-initial-format",
+            "application/vnd.zkperf.mock-proof",
+            false,
+        ),
+        (
+            "bad-transformed-format",
+            "application/vnd.zkperf.mock-proof+compressed",
+            true,
+        ),
+    ] {
+        let fixture = Fixture::new();
+        adapter(&fixture, mode);
+        let output = run(&fixture);
+        assert_status(&output, 6);
+        let stderr = String::from_utf8(output.stderr).unwrap();
+        assert!(stderr.contains("text/plain"), "{stderr}");
+        assert!(stderr.contains(expected_format), "{stderr}");
+        assert_state(&fixture, "failed");
+        let operations = operations(&fixture);
+        assert!(!operations.iter().any(|operation| operation == "verify"));
+        assert_eq!(
+            operations
+                .iter()
+                .any(|operation| operation == "prove/transform"),
+            transformed
+        );
+    }
+}

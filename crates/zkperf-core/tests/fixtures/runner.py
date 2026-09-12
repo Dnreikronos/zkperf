@@ -69,7 +69,7 @@ response = next(item["response"] for item in catalog["exchanges"]
 response.update({key: request[key] for key in
                  ("protocol", "protocol_version", "request_id", "operation")})
 if mode in {"lifecycle", "bad-artifact", "oversized-artifact", "prepared-inputs",
-            "colliding-artifacts"} or mode.startswith("large-limit-"):
+            "colliding-artifacts", "bad-initial-format", "bad-transformed-format"} or mode.startswith("large-limit-"):
     params = request["params"]
     inputs = []
     for key in ("input_artifacts", "prepared_artifacts", "artifacts", "canonical_input", "proof"):
@@ -112,6 +112,9 @@ if mode in {"lifecycle", "bad-artifact", "oversized-artifact", "prepared-inputs"
             result.pop("public_values_artifact_id", None)
             response["artifacts"] = response["artifacts"][:1]
             response["artifacts"][0]["media_type"] = "application/vnd.zkperf.mock-proof+compressed"
+        if ((mode == "bad-initial-format" and params["stage"] == "initial")
+                or (mode == "bad-transformed-format" and params["stage"] == "transform")):
+            response["artifacts"][0]["media_type"] = "text/plain"
     if operation == "verify":
         result["output_digest"] = params["expected_output_digest"]
         result["commitment_digests"] = params["expected_commitment_digests"]
