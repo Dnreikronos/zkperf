@@ -98,8 +98,10 @@ fn create_temporary(directory: &Dir, path: &Path) -> Result<(String, File), RunE
 #[cfg(unix)]
 fn sync_directory(directory: &Dir, path: &Path) -> Result<(), RunError> {
     directory
-        .try_clone()
-        .and_then(|handle| handle.into_std_file().sync_all())
+        // Linux directory capabilities may use O_PATH, which fsync rejects.
+        // Reopen the same directory for reading without resolving its pathname.
+        .open(".")
+        .and_then(|handle| handle.sync_all())
         .map_err(|error| RunError::io(path, error))
 }
 
