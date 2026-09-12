@@ -67,7 +67,8 @@ No override rewrites the source manifest.
 Manifest paths and report input/output paths are relative to the current working
 directory. Benchmark output directories (flags, environment, and manifest) are
 relative to the manifest directory and follow the same path restrictions as
-`outputs.directory`. Comma-separated environment formats replace the whole list.
+`outputs.directory`. Once execution exists, each run writes to its own
+directory underneath it; see [run directories](run-directories-v1.md). Comma-separated environment formats replace the whole list.
 Unrelated environment variables are ignored. `init` does not read a manifest.
 `report` and `compare` do not load one either.
 
