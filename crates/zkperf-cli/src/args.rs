@@ -70,9 +70,9 @@ pub enum LogLevel {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Create a starter benchmark directory (template service pending)
+    /// Create a starter benchmark directory without prompting
     #[command(
-        after_help = "Example: zkperf init ./benchmarks\nTemplate generation is tracked in issue #8."
+        after_help = "Example: zkperf init ./benchmarks\nExisting template files require --force to replace."
     )]
     Init(InitArgs),
     /// Validate a manifest, fixture paths, and effective benchmark settings

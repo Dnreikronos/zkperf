@@ -1,5 +1,6 @@
 //! Engine-independent benchmark orchestration primitives.
 
+mod init;
 mod manifest;
 mod measurement;
 mod metadata;
@@ -7,6 +8,7 @@ mod report;
 mod sample;
 mod types;
 
+pub use init::initialize;
 pub use manifest::{
     BenchmarkManifest, FixtureHashError, ManifestEngine, ManifestError, ManifestInput,
     ManifestOutputs, ManifestOverrides, ManifestRun, ManifestVersion, ManifestWorkload,

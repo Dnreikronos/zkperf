@@ -117,7 +117,6 @@ fn pending_services_fail_explicitly_without_writing_files() {
     let source = fs::read(fixture.manifest()).unwrap();
     let initial_count = fs::read_dir(&fixture.0).unwrap().count();
     for args in [
-        vec!["init", ".", "--force"],
         vec!["run"],
         vec!["report", "missing.json", "--output", "report.html"],
         vec!["compare", "a.json", "b.json", "--output", "comparison.json"],
@@ -155,7 +154,7 @@ fn manifest_diagnostics_are_actionable_even_in_quiet_mode() {
 
 #[test]
 fn report_and_compare_validate_only_their_relevant_environment() {
-    for args in [vec!["init"], vec!["report", "a"], vec!["compare", "a", "b"]] {
+    for args in [vec!["report", "a"], vec!["compare", "a", "b"]] {
         let output = command()
             .args(args)
             .env("ZKPERF_MANIFEST", "missing")
@@ -187,7 +186,7 @@ fn diagnostic_write_failures_override_the_original_error_status() {
 
     for (args, original_status) in [
         (vec!["--quiet", "validate", "--manifest", "missing.toml"], 3),
-        (vec!["--quiet", "init"], 5),
+        (vec!["--quiet", "report", "missing.json"], 5),
     ] {
         let normal = command().args(&args).output().unwrap();
         assert_status(&normal, original_status);
