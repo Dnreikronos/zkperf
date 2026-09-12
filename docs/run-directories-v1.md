@@ -14,6 +14,7 @@ the resulting directory until it is finished or the process stops.
     run.json                       canonical record, published atomically
     plan.json                      the redacted schedule this run expands
     artifacts.jsonl                one JSON artifact record per line
+    .zkperf-artifacts/<artifact ID> host-owned snapshots of adopted evidence
     attempts/<position>-<attempt>/ one adapter invocation
       inputs/                      host-written request inputs
       outputs/                     adapter-written artifacts
@@ -46,11 +47,12 @@ provenance instead of a random source:
 | --- | --- | --- |
 | Run | `zkperf-run-id-v1` | plan ID, creation timestamp, process ID, process-local sequence |
 | Attempt | `zkperf-attempt-id-v1` | run ID, job ID, attempt index |
-| Artifact | `zkperf-artifact-id-v1` | run ID, run-relative artifact path |
+| Artifact | `zkperf-artifact-id-v1` | run ID, requested run-relative artifact path |
 
-A run ID is therefore reproducible from what the record already states, and two
-artifacts in one run share an ID only if they share a path, which the directory
-rejects.
+The run ID is stored in the record; its process ID and sequence ingredients
+are not retained for reconstruction. Artifact identity follows the requested
+path, including the producer's source path for adoption. Recording the same
+requested path twice is rejected.
 
 ## Provenance and integrity
 
@@ -61,7 +63,7 @@ plan ID binds the complete effective configuration, including CLI and
 environment overrides. Guest binaries and engine outputs do not exist at
 creation time; they are hashed when the run stores or adopts them.
 
-Every artifact is content-addressed as it is recorded, with its SHA-256 digest,
+Every artifact records its SHA-256 digest,
 byte length, media type, kind, run-relative URI, and originating attempt. Those
 records are exactly the `artifacts` entries of a
 [`BenchmarkReport`](benchmark-report-v1.md), so the integrity hashes in a
@@ -74,12 +76,19 @@ Two ways in:
 - **Adopt**: an adapter already wrote a file inside its outputs root. The run
   opens it once without following links, requests nonblocking I/O, and rejects
   non-regular handles before hashing. A FIFO without a writer is rejected
-  instead of blocking adoption. The digest describes the bytes read through
-  that handle; callers must finish writing evidence before adopting it.
+  instead of blocking adoption. It streams the source into a separate file
+  under `.zkperf-artifacts/<artifact ID>`, hashing the exact bytes copied, then
+  publishes that snapshot and records its URI. Later writes through a retained
+  producer handle, or replacement of the source path, cannot change the snapshot.
+  Callers should finish producing evidence first so the snapshot is complete;
+  even if they write concurrently, the recorded digest describes the copy.
 
 `run.json`, `plan.json`, and `artifacts.jsonl` are reserved at the run root,
 including ASCII case variants such as `ARTIFACTS.JSONL`. This prevents adoption
 of mutable internal files through aliases on case-insensitive filesystems.
+The `.zkperf-artifacts` directory and all its descendants are also reserved,
+including case variants. `store`, `open_new`, and `adopt` reject those paths;
+only adoption's internal snapshot writer may publish there.
 
 Streamed evidence, such as captured adapter output, is created up front and
 adopted once complete. `plan.json` uses the manifest's diagnostic redaction, so
@@ -122,11 +131,20 @@ Only the run's own record is rewritten by rename, because replacing it is the
 point. A failed write removes the temporary file it created, and only that one:
 a name another writer holds is stepped over rather than deleted.
 
+Each artifact index append calls `sync_data` before returning. If directory
+syncing fails after an artifact was published, the run still appends and syncs
+its provenance, then returns `RunError::PublishedButNotDurable`. The artifact
+is present in `artifacts()` and the index; retrying its requested path is a
+duplicate. An index write or sync failure instead returns an I/O error.
+
 `run.json` is written with state `in_progress` before any work and rewritten
 once, atomically, when the run finishes as `completed` or `failed`. A directory
 left in `in_progress` belongs to a run that is still going or that was
-interrupted; either way its plan, logs, attempt workspaces, and
-`artifacts.jsonl` are intact and readable. A finished record declares the
+interrupted; completed evidence remains available for diagnosis. Publication
+and index append are separate filesystem operations: interruption between them
+can leave an unindexed file, and interruption during an append can leave an
+incomplete final JSONL line. Completed lines remain usable; automatic recovery
+of that tail is not provided here. A finished record declares the
 artifact count, which must match the number of lines in `artifacts.jsonl`;
 before that, the index is the authority. An interrupted creation can leave a
 directory without `run.json`, which identifies it as a run that never started.
@@ -146,6 +164,8 @@ redaction of persisted configuration.
 Regression tests interleave a parent-directory swap between resolution and
 publication, verify retained root identity, reject reserved-name case aliases,
 and bound FIFO adoption in a subprocess so regressions cannot hang the suite.
+They also cover snapshots surviving producer mutation, cleanup after a failed
+source read, and recording provenance after an injected directory-sync failure.
 
 Execution, resource metrics, and report rendering are tracked in issues #11–16.
 The CLI writes no run directory until the supervised runner exists.
