@@ -78,11 +78,11 @@ pub enum Command {
     /// Validate a manifest, fixture paths, and effective benchmark settings
     #[command(after_help = "Example: zkperf validate --manifest suite/zkperf.toml --print-config")]
     Validate(BenchmarkArgs),
-    /// Run benchmarks (execution service pending); inspect with --print-config
+    /// Plan benchmarks with --dry-run (execution service pending)
     #[command(
-        after_help = "Example: zkperf run --runs 10 --print-config\nExecution is tracked in issues #9–15."
+        after_help = "Example: zkperf run --runs 10 --dry-run --plan-format table\nExecution is tracked in issues #10–15."
     )]
-    Run(BenchmarkArgs),
+    Run(RunArgs),
     /// Render a stored benchmark report (reporting service pending)
     #[command(
         after_help = "Example: zkperf report runs/report.json --format html --output report.html"
@@ -101,6 +101,24 @@ pub struct InitArgs {
     /// Permit replacement of existing template files
     #[arg(long)]
     pub force: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct RunArgs {
+    #[command(flatten)]
+    pub benchmark: BenchmarkArgs,
+    /// Print the complete benchmark schedule without executing adapters
+    #[arg(long, conflicts_with = "print_config")]
+    pub dry_run: bool,
+    /// Dry-run display format (defaults to JSON)
+    #[arg(long, value_enum, requires = "dry_run")]
+    pub plan_format: Option<PlanFormat>,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum PlanFormat {
+    Json,
+    Table,
 }
 
 #[derive(Debug, Args)]
