@@ -10,9 +10,9 @@ and delegate manifest validation and invariant checks to `zkperf-core`.
   overwrite policy. Success prints a validation command as the next action.
 - `zkperf validate [--manifest FILE] [--print-config]`: validate a manifest and
   its effective configuration. Print deterministic, redacted JSON when requested.
-- `zkperf run [--manifest FILE] [--print-config]`: resolve benchmark configuration;
-  `--print-config` inspects it without execution. Planning and execution belong
-  to issues #9–15.
+- `zkperf run [--manifest FILE] [--dry-run | --print-config]`: resolve benchmark
+  configuration. `--dry-run` prints the deterministic schedule; `--print-config`
+  prints only the effective configuration. Execution belongs to issues #10–15.
 - `zkperf report INPUT [--format FORMAT] [--output FILE]`: render a stored report.
   Rendering belongs to issues #16, #20 and #21.
 - `zkperf compare BASELINE CANDIDATE [--format FORMAT] [--output FILE]`:
@@ -26,6 +26,21 @@ create files or report a successful benchmark. All commands provide `--help`.
 and `--format FORMAT[,FORMAT...]`. Formats are `terminal`, `json`, `html`, `csv`.
 Multiple formats replace the whole manifest list; duplicates are invalid.
 `report` accepts one format; `compare` accepts `terminal` or `json`.
+
+`run --dry-run` accepts `--plan-format json|table`, defaulting to JSON. JSON
+contains every job, the effective redacted manifest, and referenced file digests.
+The table summarizes the same ordered jobs, separates warm-ups from measured
+repetitions, and shows the plan ID used as the prefix of every job ID. Positions
+and repetition indices start at zero. `--plan-format` requires `--dry-run`;
+`--dry-run` conflicts with `--print-config`. Report `--format` selections do not
+change the plan view. Neither view executes or discovers adapters, writes files,
+or creates output directories. See [planning v1](benchmark-planning-v1.md) for
+the ordering, identity, and provenance contract.
+
+```console
+zkperf run --manifest suite/zkperf.toml --dry-run --plan-format table
+zkperf run --manifest suite/zkperf.toml --dry-run --plan-format json > plan.json
+```
 
 ## Configuration precedence
 

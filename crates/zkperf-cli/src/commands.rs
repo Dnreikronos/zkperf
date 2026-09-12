@@ -1,6 +1,8 @@
+mod plan;
+
 use std::io::Write;
 
-use crate::args::{Command, ComparisonFormat, Format, LogLevel};
+use crate::args::{Command, ComparisonFormat, Format, LogLevel, PlanFormat};
 use crate::config::{self, Environment};
 use crate::diagnostics::{Diagnostic, Logger};
 
@@ -10,8 +12,15 @@ pub fn execute(
     logger: &mut Logger<impl Write>,
 ) -> Result<String, Diagnostic> {
     match command {
-        Command::Validate(args) => benchmark(args, false, env, logger),
-        Command::Run(args) => benchmark(args, true, env, logger),
+        Command::Validate(args) => benchmark(args, false, None, env, logger),
+        Command::Run(args) => benchmark(
+            args.benchmark,
+            true,
+            args.dry_run
+                .then_some(args.plan_format.unwrap_or(PlanFormat::Json)),
+            env,
+            logger,
+        ),
         Command::Init(args) => {
             zkperf_core::initialize(&args.directory, args.force)?;
             let manifest = args.directory.join("zkperf.toml");
@@ -42,6 +51,7 @@ pub fn execute(
 fn benchmark(
     args: crate::args::BenchmarkArgs,
     execute: bool,
+    plan_format: Option<PlanFormat>,
     env: Environment<'_>,
     logger: &mut Logger<impl Write>,
 ) -> Result<String, Diagnostic> {
@@ -57,8 +67,13 @@ fn benchmark(
             .normalized_debug()
             .map_err(|error| Diagnostic::configuration(error.to_string()));
     }
+    if let Some(format) = plan_format {
+        let plan = zkperf_core::BenchmarkPlan::build(manifest)
+            .map_err(|error| Diagnostic::configuration(error.to_string()))?;
+        return plan::render(&plan, format);
+    }
     if execute {
-        return Err(Diagnostic::unavailable("run execution", "issues #9–15"));
+        return Err(Diagnostic::unavailable("run execution", "issues #10–15"));
     }
     Ok(format!(
         "Manifest is valid: {}",
