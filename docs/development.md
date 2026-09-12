@@ -53,6 +53,17 @@ Adoption opens without following links or blocking on FIFOs, then validates
 the opened handle before hashing. These crates provide the platform-specific
 operations while keeping workspace code free of unsafe Rust.
 
+Subprocess supervision uses `process-wrap` 8.2 for Unix process groups and
+Windows Job Objects. Adapters must keep descendants in that containment group.
+The CLI uses `ctrlc` to translate interrupt/termination signals into the core's
+cancellation token. The core's offline `jsonschema` validator uses the checked-in
+protocol schema; schema compilation, artifact hashing, and evidence publication
+are excluded from adapter phase timing. These dependencies preserve Rust 1.85.
+
+The runner's integration tests require Python 3.10+ (`python3` on Unix, `python`
+on Windows) for subprocess fixtures. Run the focused execution checks with
+`cargo test -p zkperf-core --test subprocess_runner -p zkperf-cli --test execution`.
+
 ## One-command verification
 
 Install the development prerequisites once:
