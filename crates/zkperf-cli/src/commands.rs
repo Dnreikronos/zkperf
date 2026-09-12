@@ -1,4 +1,5 @@
 mod plan;
+mod run;
 
 use std::io::Write;
 
@@ -73,7 +74,7 @@ fn benchmark(
         return plan::render(&plan, format);
     }
     if execute {
-        return Err(Diagnostic::unavailable("run execution", "issues #10–15"));
+        return run::execute(manifest, logger);
     }
     Ok(format!(
         "Manifest is valid: {}",

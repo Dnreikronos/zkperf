@@ -117,7 +117,6 @@ fn pending_services_fail_explicitly_without_writing_files() {
     let source = fs::read(fixture.manifest()).unwrap();
     let initial_count = fs::read_dir(&fixture.0).unwrap().count();
     for args in [
-        vec!["run"],
         vec!["report", "missing.json", "--output", "report.html"],
         vec!["compare", "a.json", "b.json", "--output", "comparison.json"],
     ] {

@@ -10,6 +10,14 @@ pub struct Diagnostic {
 }
 
 impl Diagnostic {
+    pub fn runtime(message: impl Into<String>, cancelled: bool) -> Self {
+        Self {
+            exit_code: if cancelled { 130 } else { 6 },
+            category: if cancelled { "cancelled" } else { "runtime" },
+            message: message.into(),
+        }
+    }
+
     pub fn configuration(message: impl Into<String>) -> Self {
         Self {
             exit_code: 3,
