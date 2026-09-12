@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_DIRECT_DEPENDENCIES = {
     "zkperf-adapter-protocol": set(),
     "zkperf-core": {
+        "cap-std",
+        "cap-fs-ext",
         "chrono",
         "semver",
         "serde",
