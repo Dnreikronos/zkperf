@@ -335,7 +335,14 @@ fn files_the_run_keeps_writing_cannot_become_artifacts() {
     let plan = fixture.plan();
     let mut run = RunDirectory::create(&plan).unwrap();
 
-    for path in ["run.json", "plan.json", "artifacts.jsonl"] {
+    for path in [
+        "run.json",
+        "plan.json",
+        "artifacts.jsonl",
+        "RUN.JSON",
+        "Plan.Json",
+        "ARTIFACTS.JSONL",
+    ] {
         let adopted = run.adopt(&request(path, ArtifactKind::Other)).unwrap_err();
         let stored = run
             .store(&request(path, ArtifactKind::Other), b"replacement")

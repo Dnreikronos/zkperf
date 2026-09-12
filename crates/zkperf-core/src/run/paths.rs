@@ -66,7 +66,11 @@ pub(super) fn segments(relative: &str) -> Result<Vec<&str>, RunError> {
         segments.push(segment);
     }
 
-    if segments.len() == 1 && RESERVED_RUN_FILES.contains(&segments[0]) {
+    if segments.len() == 1
+        && RESERVED_RUN_FILES
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case(segments[0]))
+    {
         return Err(RunError::invalid_path(
             relative,
             "names a file the run directory keeps writing to",
