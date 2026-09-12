@@ -39,8 +39,6 @@ if mode in {"tree", "orphan-pipes", "orphan-silent", "graceful", "cancel-cli"}:
         time.sleep(.15)
     else:
         time.sleep(30)
-if mode == "sleep":
-    time.sleep(30)
 if mode == "exit":
     sys.exit(7)
 if mode == "signal":
