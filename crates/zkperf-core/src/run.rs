@@ -11,7 +11,7 @@ use std::io::{self, ErrorKind, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsSyncExt};
 use cap_std::fs::{Dir, OpenOptions};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -189,7 +189,8 @@ impl RunDirectory {
     pub fn adopt(&mut self, request: &ArtifactRequest) -> Result<Artifact, RunError> {
         let path = paths::resolve(&self.directory, &self.path, &request.path)?;
         let mut options = OpenOptions::new();
-        options.read(true).follow(FollowSymlinks::No);
+        // Validate the opened object without waiting for a FIFO writer first.
+        options.read(true).follow(FollowSymlinks::No).nonblock(true);
         let mut file = path
             .directory
             .open_with(&path.name, &options)

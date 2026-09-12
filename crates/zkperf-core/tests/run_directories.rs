@@ -375,6 +375,62 @@ fn files_the_run_keeps_writing_cannot_become_artifacts() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn adopting_fifo_without_writer_is_rejected() {
+    use std::process::Command;
+    use std::time::{Duration, Instant};
+
+    const CHILD_MANIFEST: &str = "ZKPERF_TEST_FIFO_MANIFEST";
+    if let Some(manifest) = std::env::var_os(CHILD_MANIFEST) {
+        let plan = BenchmarkPlan::build(BenchmarkManifest::load(manifest).unwrap()).unwrap();
+        let mut run = RunDirectory::create(&plan).unwrap();
+        let fifo = run.path().join("proof.bin");
+        assert!(
+            Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(matches!(
+            run.adopt(&request("proof.bin", ArtifactKind::Proof)),
+            Err(RunError::NotARegularFile(path)) if path == fifo
+        ));
+        assert!(run.artifacts().is_empty());
+        assert!(
+            fs::read(run.path().join("artifacts.jsonl"))
+                .unwrap()
+                .is_empty()
+        );
+        return;
+    }
+
+    let fixture = Fixture::new(SOURCE);
+    let mut child = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "adopting_fifo_without_writer_is_rejected",
+            "--nocapture",
+        ])
+        .env(CHILD_MANIFEST, fixture.0.join("zkperf.toml"))
+        .spawn()
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success(), "FIFO adoption child failed: {status}");
+            break;
+        }
+        if Instant::now() >= deadline {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            panic!("adoption blocked waiting for a FIFO writer");
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
 #[test]
 fn stored_and_adopted_artifacts_carry_report_integrity_hashes() {
     let fixture = Fixture::new(SOURCE);
