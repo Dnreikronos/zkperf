@@ -186,12 +186,18 @@ impl RunDirectory {
     /// already recorded, is not a regular file, or cannot be hashed.
     pub fn adopt(&mut self, request: &ArtifactRequest) -> Result<Artifact, RunError> {
         let path = paths::resolve(&self.path, &request.path)?;
-        let metadata = fs::symlink_metadata(&path).map_err(|error| RunError::io(&path, error))?;
-        if !metadata.is_file() {
+        // Hash the handle rather than the path: reopening it would leave room
+        // for a different file to answer to the name in between.
+        let mut file = File::open(&path).map_err(|error| RunError::io(&path, error))?;
+        if !file
+            .metadata()
+            .map_err(|error| RunError::io(&path, error))?
+            .is_file()
+        {
             return Err(RunError::NotARegularFile(path));
         }
         let (digest, byte_length) =
-            crate::digest::hash_file(&path).map_err(|error| RunError::io(&path, error))?;
+            crate::digest::hash_reader(&mut file).map_err(|error| RunError::io(&path, error))?;
         let artifact = self.artifact(request, digest, byte_length)?;
         self.commit(&request.path, artifact)
     }

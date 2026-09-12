@@ -28,13 +28,18 @@ pub(crate) fn hash_bytes(contents: &[u8]) -> [u8; 32] {
 
 /// Streams a file through SHA-256 without holding its contents in memory.
 pub(crate) fn hash_file(path: &Path) -> io::Result<(Sha256Digest, ByteSize)> {
-    let mut file = File::open(path)?;
+    hash_reader(&mut File::open(path)?)
+}
+
+/// Hashes what an already-open handle reads, so the digest describes the bytes
+/// that were read rather than whatever the path resolves to afterwards.
+pub(crate) fn hash_reader(reader: &mut impl Read) -> io::Result<(Sha256Digest, ByteSize)> {
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; READ_BUFFER_BYTES];
     let mut byte_length = 0_u64;
 
     loop {
-        let read = file.read(&mut buffer)?;
+        let read = reader.read(&mut buffer)?;
         if read == 0 {
             break;
         }
