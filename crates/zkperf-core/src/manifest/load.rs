@@ -670,27 +670,60 @@ fn resolve_regular_file(
     canonical_regular_file(&base.join(path), field_path).map(ResolvedFile)
 }
 
-fn resolve_output_directory(base: &Path, path: &Path) -> Result<PathBuf, ManifestError> {
+pub(super) fn resolve_output_directory(base: &Path, path: &Path) -> Result<PathBuf, ManifestError> {
     const FIELD: &str = "outputs.directory";
     require_relative(path, FIELD)?;
+    let base = fs::canonicalize(base).map_err(|error| {
+        ManifestError::new(
+            FIELD,
+            format!("could not resolve {}: {error}", base.display()),
+        )
+    })?;
     let resolved = normalize_path(&base.join(path));
-    match fs::metadata(&resolved) {
-        Ok(metadata) if metadata.is_dir() => fs::canonicalize(&resolved).map_err(|error| {
-            ManifestError::new(
-                FIELD,
-                format!("could not resolve {}: {error}", resolved.display()),
-            )
-        }),
-        Ok(_) => Err(ManifestError::new(
-            FIELD,
-            format!("{} is not a directory", resolved.display()),
-        )),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(resolved),
-        Err(error) => Err(ManifestError::new(
-            FIELD,
-            format!("could not inspect {}: {error}", resolved.display()),
-        )),
+    for ancestor in resolved.ancestors() {
+        match fs::symlink_metadata(ancestor) {
+            Ok(_) => {
+                // A dangling symlink exists, but cannot establish a safe destination.
+                let canonical = fs::canonicalize(ancestor).map_err(|error| {
+                    ManifestError::new(
+                        FIELD,
+                        format!("could not resolve {}: {error}", ancestor.display()),
+                    )
+                })?;
+                if !canonical.starts_with(&base) {
+                    return Err(ManifestError::new(
+                        FIELD,
+                        "must resolve within the manifest directory",
+                    ));
+                }
+                if !canonical.is_dir() {
+                    return Err(ManifestError::new(
+                        FIELD,
+                        format!("{} is not a directory", canonical.display()),
+                    ));
+                }
+                let suffix = resolved.strip_prefix(ancestor).map_err(|error| {
+                    ManifestError::new(FIELD, format!("could not resolve output suffix: {error}"))
+                })?;
+                return Ok(if suffix.as_os_str().is_empty() {
+                    canonical
+                } else {
+                    canonical.join(suffix)
+                });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(ManifestError::new(
+                    FIELD,
+                    format!("could not inspect {}: {error}", ancestor.display()),
+                ));
+            }
+        }
     }
+    Err(ManifestError::new(
+        FIELD,
+        "could not resolve an existing output ancestor",
+    ))
 }
 
 fn require_relative(path: &Path, field_path: &str) -> Result<(), ManifestError> {

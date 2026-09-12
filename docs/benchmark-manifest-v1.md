@@ -152,6 +152,14 @@ The output directory may be absent, but it must not resolve to an existing
 non-directory. Resolved fixture files expose a SHA-256 content digest; paths
 alone are never used as content identity.
 
+Output directories must resolve within the canonical manifest directory.
+For a missing output directory, the loader resolves its nearest existing
+ancestor before appending the missing components. Symlinks to directories within
+the manifest directory are allowed; symlinks outside it and dangling symlinks
+are rejected. These checks apply to CLI overrides too. Validation reflects the
+filesystem at load time. Future output writers must check containment again
+when creating directories; a validated path does not prevent later symlink swaps.
+
 ## 5. Validation and diagnostics
 
 Deserialization, path resolution, and cross-field validation are one operation.
