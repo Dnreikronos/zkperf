@@ -31,6 +31,12 @@ carries no separators. The directory is created exclusively: an existing name
 is an error, never a replacement. Two runs started in the same second still get
 distinct directories because the run ID differs.
 
+The manifest checked its output directory when it was loaded, which says
+nothing about the filesystem at run time. Creation confirms the suite root
+again, creates each level of the output directory itself while refusing any
+symbolic link it meets, and finally checks that the new run directory still
+resolves inside that suite root.
+
 ## Identity
 
 Run, attempt, and artifact identifiers are RFC 9562 version 8 UUIDs derived
@@ -67,7 +73,12 @@ Two ways in:
 - **Store**: the harness writes bytes to a run-relative path. The file is
   published atomically and hashed from the bytes written.
 - **Adopt**: an adapter already wrote a file inside its outputs root. The run
-  hashes it in place and records it without copying or rewriting it.
+  opens it once and hashes what that handle reads, so the digest describes the
+  bytes it saw rather than whatever the name resolves to later.
+
+`run.json`, `plan.json`, and `artifacts.jsonl` cannot be stored or adopted. The
+run keeps writing to them, so any digest taken from one would be wrong by the
+time the record naming it is published.
 
 Streamed evidence, such as captured adapter output, is created up front and
 adopted once complete. `plan.json` uses the manifest's diagnostic redaction, so
@@ -89,14 +100,25 @@ lexical plus a per-component link check rather than canonicalization, so a
 directory is never resolved through a link that a concurrent writer could
 replace.
 
+The root itself is checked the same way before every operation: it must still
+be a real directory that resolves to itself. Replacing a finished run's
+directory with a link to somewhere else stops the next write instead of
+redirecting it. The standard library has no portable way to hold a directory
+open and resolve against that handle, so this check stands in for one.
+
 ## Atomicity and interrupted runs
 
-Canonical results are written to a temporary file in the destination directory,
-flushed, and renamed into place; on Unix the destination directory is flushed
-afterwards. A reader observes either the previous file or the complete new one.
-A failed write removes its temporary file and leaves the published path
-unchanged. Storing an artifact at an occupied path is an error, so atomic
-publication never becomes silent replacement.
+Canonical results are written to a temporary file in the destination directory
+and flushed before they are published under their own name; on Unix the
+directory is flushed afterwards. A reader never sees a partial file.
+
+Artifacts are published by linking the completed temporary file to its
+destination, which fails when that name is already taken. A rename would report
+success after replacing whatever another writer published first, and checking
+for the destination beforehand only narrows that window instead of closing it.
+Only the run's own record is rewritten by rename, because replacing it is the
+point. A failed write removes the temporary file it created, and only that one:
+a name another writer holds is stepped over rather than deleted.
 
 `run.json` is written with state `in_progress` before any work and rewritten
 once, atomically, when the run finishes as `completed` or `failed`. A directory
@@ -110,12 +132,14 @@ directory without `run.json`, which identifies it as a run that never started.
 ## Verification scope
 
 Tests cover unique directories across runs of one plan, refusal to replace a
-stored artifact, interrupted evidence readable through `RunRecord`, path
-escapes through relative segments, absolute paths, separators, device names and
-symbolic links, digests and byte lengths for stored and adopted artifacts,
-disjoint and non-reusable attempt workspaces, published outcomes and
-provenance, absence of leftover temporary files, and redaction of persisted
-configuration.
+stored artifact or a destination that appeared first, interrupted evidence
+readable through `RunRecord`, path escapes through relative segments, absolute
+paths, separators, device names and symbolic links, a run root and an output
+directory swapped for links after they were checked, refusal of the run's own
+files as artifacts, a taken temporary name left alone, digests and byte lengths
+for stored and adopted artifacts, disjoint and non-reusable attempt workspaces,
+published outcomes and provenance, absence of leftover temporary files, and
+redaction of persisted configuration.
 
 Execution, resource metrics, and report rendering are tracked in issues #11–16.
 The CLI writes no run directory until the supervised runner exists.
