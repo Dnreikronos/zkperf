@@ -24,7 +24,7 @@ EXPECTED_DIRECT_DEPENDENCIES = {
         "uuid",
         "zkperf-adapter-protocol",
     },
-    "zkperf-cli": {"zkperf-core"},
+    "zkperf-cli": {"clap", "serde_json", "zkperf-core"},
 }
 
 
