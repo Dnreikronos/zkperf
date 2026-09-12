@@ -45,6 +45,14 @@ No zkVM SDK may enter the CLI or core dependency graph. The verification script
 enforces the exact initial workspace topology, so dependency changes require an
 intentional policy update instead of silently crossing a boundary.
 
+The core uses `cap-std` and `cap-fs-ext` for run storage. A run holds its
+directory open; child directories are opened one component at a time without
+following links. Creation, publication, cleanup, and directory syncing use
+those handles, so replacing a checked path cannot redirect a later operation.
+Adoption opens without following links or blocking on FIFOs, then validates
+the opened handle before hashing. These crates provide the platform-specific
+operations while keeping workspace code free of unsafe Rust.
+
 ## One-command verification
 
 Install the development prerequisites once:

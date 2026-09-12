@@ -2,8 +2,9 @@ use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
 use std::str::FromStr;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, SecondsFormat};
 use semver::Version;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -113,6 +114,7 @@ pub enum DomainError {
     InvalidSlug(String),
     InvalidSemanticVersion(String),
     InvalidTimestamp(String),
+    UnavailableClock,
     StopBeforeStart,
     DurationMismatch {
         expected: Nanoseconds,
@@ -132,6 +134,9 @@ impl Display for DomainError {
             }
             Self::InvalidTimestamp(value) => {
                 write!(formatter, "invalid RFC 3339 timestamp: {value}")
+            }
+            Self::UnavailableClock => {
+                formatter.write_str("the system clock is outside the representable range")
             }
             Self::StopBeforeStart => formatter.write_str("stop time must not precede start time"),
             Self::DurationMismatch { expected, actual } => write!(
@@ -410,9 +415,38 @@ impl Timestamp {
         Ok(Self { encoded, value })
     }
 
+    /// Reads the system clock as an RFC 3339 UTC timestamp.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DomainError::UnavailableClock`] when the system clock is
+    /// before the Unix epoch or outside the representable range.
+    pub fn now() -> Result<Self, DomainError> {
+        let since_epoch = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| DomainError::UnavailableClock)?;
+        let seconds =
+            i64::try_from(since_epoch.as_secs()).map_err(|_| DomainError::UnavailableClock)?;
+        let value = DateTime::from_timestamp(seconds, since_epoch.subsec_nanos())
+            .ok_or(DomainError::UnavailableClock)?;
+        Ok(Self {
+            encoded: value.to_rfc3339_opts(SecondsFormat::Nanos, true),
+            value: value.fixed_offset(),
+        })
+    }
+
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.encoded
+    }
+
+    /// Formats the instant as a compact UTC stamp usable in a file name.
+    ///
+    /// RFC 3339 punctuation is not portable across filesystems, so the stamp
+    /// keeps only digits, the date/time separator, and the UTC designator.
+    #[must_use]
+    pub fn file_stamp(&self) -> String {
+        self.value.to_utc().format("%Y%m%dT%H%M%SZ").to_string()
     }
 
     #[must_use]

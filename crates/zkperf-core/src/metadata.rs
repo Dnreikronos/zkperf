@@ -80,6 +80,15 @@ impl Sha256Digest {
         }
     }
 
+    /// Encodes raw SHA-256 output as a canonical lowercase digest.
+    #[must_use]
+    pub fn from_bytes(digest: [u8; 32]) -> Self {
+        Self {
+            algorithm: Sha256Algorithm,
+            value: crate::digest::encode_hex(&digest),
+        }
+    }
+
     #[must_use]
     pub fn value(&self) -> &str {
         &self.value
