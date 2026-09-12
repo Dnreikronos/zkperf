@@ -670,7 +670,7 @@ fn resolve_regular_file(
     canonical_regular_file(&base.join(path), field_path).map(ResolvedFile)
 }
 
-fn resolve_output_directory(base: &Path, path: &Path) -> Result<PathBuf, ManifestError> {
+pub(super) fn resolve_output_directory(base: &Path, path: &Path) -> Result<PathBuf, ManifestError> {
     const FIELD: &str = "outputs.directory";
     require_relative(path, FIELD)?;
     let resolved = normalize_path(&base.join(path));

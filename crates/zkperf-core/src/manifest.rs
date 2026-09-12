@@ -1,6 +1,9 @@
 //! Validated `zkperf.toml` benchmark definitions.
 
 mod load;
+mod overrides;
+
+pub use overrides::ManifestOverrides;
 
 use std::collections::BTreeMap;
 use std::error::Error;
