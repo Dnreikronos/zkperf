@@ -1,6 +1,7 @@
 //! Engine-independent benchmark orchestration primitives.
 
 mod digest;
+mod execution;
 mod init;
 mod manifest;
 mod measurement;
@@ -12,6 +13,7 @@ mod runner;
 mod sample;
 mod types;
 
+pub use execution::{ExecutionResult, execute_plan};
 pub use init::initialize;
 pub use manifest::{
     BenchmarkManifest, FixtureHashError, ManifestEngine, ManifestError, ManifestInput,
