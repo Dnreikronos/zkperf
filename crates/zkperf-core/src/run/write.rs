@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{self, ErrorKind, Read, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -36,16 +36,43 @@ fn create_file(directory: &Dir, name: &str, path: &Path) -> Result<File, RunErro
 /// The completed temporary file is linked into place, which fails when the
 /// destination appeared after the caller checked for it. A rename would report
 /// success while replacing that writer's evidence.
-pub(super) fn publish_new(path: &RunPath, contents: &[u8]) -> Result<(), RunError> {
+pub(super) fn publish_new(path: &RunPath, contents: &[u8]) -> Result<Publication, RunError> {
     let temporary = write_temporary(path, contents)?;
-    publish_temporary(path, &temporary)
+    publish_temporary(path, &temporary, sync_directory)
+}
+
+/// Publication succeeded; a subsequent sync error must not skip provenance.
+#[derive(Debug)]
+pub(super) struct Publication {
+    durability: Result<(), RunError>,
+}
+
+impl Publication {
+    fn new(path: &Path, durability: io::Result<()>) -> Self {
+        Self {
+            durability: durability.map_err(|source| RunError::PublishedButNotDurable {
+                path: path.to_path_buf(),
+                source,
+            }),
+        }
+    }
+
+    pub fn finish(self) -> Result<(), RunError> {
+        self.durability
+    }
+
+    pub fn record<T>(self, record: impl FnOnce() -> Result<T, RunError>) -> Result<T, RunError> {
+        let value = record()?;
+        self.finish()?;
+        Ok(value)
+    }
 }
 
 /// Publishes a separate inode containing exactly the bytes that were hashed.
 pub(super) fn snapshot(
     path: &RunPath,
     reader: &mut impl Read,
-) -> Result<(crate::Sha256Digest, crate::ByteSize), RunError> {
+) -> Result<(crate::Sha256Digest, crate::ByteSize, Publication), RunError> {
     let (temporary, mut file) = create_temporary(&path.directory, &path.path)?;
     let result = crate::digest::copy_and_hash(reader, &mut file)
         .and_then(|integrity| file.sync_all().map(|()| integrity));
@@ -57,11 +84,15 @@ pub(super) fn snapshot(
             return Err(RunError::io(&path.path, error));
         }
     };
-    publish_temporary(path, &temporary)?;
-    Ok(integrity)
+    let publication = publish_temporary(path, &temporary, sync_directory)?;
+    Ok((integrity.0, integrity.1, publication))
 }
 
-fn publish_temporary(path: &RunPath, temporary: &str) -> Result<(), RunError> {
+fn publish_temporary(
+    path: &RunPath,
+    temporary: &str,
+    sync: impl FnOnce(&Dir) -> io::Result<()>,
+) -> Result<Publication, RunError> {
     let result = path
         .directory
         .hard_link(temporary, &path.directory, &path.name)
@@ -75,7 +106,7 @@ fn publish_temporary(path: &RunPath, temporary: &str) -> Result<(), RunError> {
     // The published name now has its own link to the completed contents.
     drop(path.directory.remove_file(temporary));
     result?;
-    sync_directory(&path.directory, &path.path)
+    Ok(Publication::new(&path.path, sync(&path.directory)))
 }
 
 /// Replaces `path` with `contents` so a reader observes either the previous
@@ -91,7 +122,7 @@ pub(super) fn replace(path: &RunPath, contents: &[u8]) -> Result<(), RunError> {
         drop(path.directory.remove_file(&temporary));
         return Err(RunError::io(&path.path, error));
     }
-    sync_directory(&path.directory, &path.path)
+    Publication::new(&path.path, sync_directory(&path.directory)).finish()
 }
 
 /// Keeps creation and cleanup relative to the same open parent directory.
@@ -120,17 +151,16 @@ fn create_temporary(directory: &Dir, path: &Path) -> Result<(String, File), RunE
 }
 
 #[cfg(unix)]
-fn sync_directory(directory: &Dir, path: &Path) -> Result<(), RunError> {
+fn sync_directory(directory: &Dir) -> io::Result<()> {
     directory
         // Linux directory capabilities may use O_PATH, which fsync rejects.
         // Reopen the same directory for reading without resolving its pathname.
         .open(".")
         .and_then(|handle| handle.sync_all())
-        .map_err(|error| RunError::io(path, error))
 }
 
 #[cfg(not(unix))]
-fn sync_directory(_directory: &Dir, _path: &Path) -> Result<(), RunError> {
+fn sync_directory(_directory: &Dir) -> io::Result<()> {
     Ok(())
 }
 
@@ -184,6 +214,8 @@ mod tests {
             &RunPath::at(&handle, &directory.0, "proof.bin").unwrap(),
             b"proof",
         )
+        .unwrap()
+        .finish()
         .unwrap();
 
         assert_eq!(fs::read(&planted).unwrap(), b"evidence");
@@ -214,6 +246,50 @@ mod tests {
         }));
     }
 
+    #[test]
+    fn a_post_publication_sync_failure_still_records_the_artifact() {
+        let directory = Directory::new("sync-failure");
+        let handle = Dir::open_ambient_dir(&directory.0, ambient_authority()).unwrap();
+        let destination = RunPath::at(&handle, &directory.0, "proof.bin").unwrap();
+        let temporary = super::write_temporary(&destination, b"proof").unwrap();
+        let publication = super::publish_temporary(&destination, &temporary, |_| {
+            Err(std::io::Error::other("injected directory sync failure"))
+        })
+        .unwrap();
+        let index = directory.0.join("artifacts.jsonl");
+        let error = publication
+            .record(|| {
+                fs::write(&index, b"{\"uri\":\"proof.bin\"}\n")
+                    .map_err(|error| RunError::io(&index, error))
+            })
+            .unwrap_err();
+
+        assert!(matches!(error, RunError::PublishedButNotDurable { .. }));
+        assert_eq!(fs::read(&destination.path).unwrap(), b"proof");
+        assert_eq!(fs::read(&index).unwrap(), b"{\"uri\":\"proof.bin\"}\n");
+        assert!(!directory.0.join(temporary).exists());
+    }
+
+    #[test]
+    fn a_failed_snapshot_read_leaves_no_partial_artifact() {
+        use std::io::Read as _;
+
+        struct FailedRead;
+
+        impl std::io::Read for FailedRead {
+            fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("injected source read failure"))
+            }
+        }
+
+        let directory = Directory::new("snapshot-read-failure");
+        let handle = Dir::open_ambient_dir(&directory.0, ambient_authority()).unwrap();
+        let destination = RunPath::at(&handle, &directory.0, "snapshot").unwrap();
+        let mut reader = b"partial contents".as_slice().chain(FailedRead);
+        assert!(super::snapshot(&destination, &mut reader).is_err());
+        assert_eq!(fs::read_dir(&directory.0).unwrap().count(), 0);
+    }
+
     #[cfg(unix)]
     #[test]
     fn publication_and_cleanup_ignore_a_parent_swapped_after_resolution() {
@@ -230,7 +306,10 @@ mod tests {
         std::os::unix::fs::symlink(&outside.0, root.join("logs")).unwrap();
         fs::write(outside.0.join("proof.bin"), b"outside evidence").unwrap();
 
-        publish_new(&destination, b"proof").unwrap();
+        publish_new(&destination, b"proof")
+            .unwrap()
+            .finish()
+            .unwrap();
         assert_eq!(
             fs::read(root.join("original-logs/proof.bin")).unwrap(),
             b"proof"

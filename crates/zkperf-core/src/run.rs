@@ -121,7 +121,8 @@ impl RunDirectory {
         write::publish_new(
             &RunPath::at(&directory.directory, &directory.path, PLAN_SNAPSHOT)?,
             snapshot.as_bytes(),
-        )?;
+        )?
+        .finish()?;
         directory.publish_record()?;
         Ok(directory)
     }
@@ -175,8 +176,8 @@ impl RunDirectory {
             ByteSize::new(contents.len() as u64),
         )?;
         let path = paths::reserve(&self.directory, &self.path, &request.path)?;
-        write::publish_new(&path, contents)?;
-        self.commit(&request.path, artifact)
+        let publication = write::publish_new(&path, contents)?;
+        publication.record(|| self.commit(&request.path, artifact))
     }
 
     /// Snapshots an existing file inside the run directory as an artifact.
@@ -218,10 +219,10 @@ impl RunDirectory {
             paths::create_directory(&self.directory, SNAPSHOTS.as_ref(), &snapshots_path)?;
         let name = self.artifact_id(request).to_string();
         let destination = RunPath::at(&snapshots, &snapshots_path, &name)?;
-        let (digest, byte_length) = write::snapshot(&destination, &mut file)?;
+        let (digest, byte_length, publication) = write::snapshot(&destination, &mut file)?;
         let uri = format!("{SNAPSHOTS}/{name}");
         let artifact = self.artifact(request, &uri, digest, byte_length)?;
-        self.commit(&request.path, artifact)
+        publication.record(|| self.commit(&request.path, artifact))
     }
 
     /// Creates a new file for evidence that is streamed while a phase runs,
@@ -341,7 +342,7 @@ impl RunDirectory {
         let index = self.path.join(ARTIFACT_INDEX);
         self.index
             .write_all(&line)
-            .and_then(|()| self.index.flush())
+            .and_then(|()| self.index.sync_data())
             .map_err(|error| RunError::io(&index, error))?;
 
         self.stored.push(path.to_owned());
@@ -458,14 +459,26 @@ fn derive(domain: &[u8], ingredients: &[&[u8]]) -> Uuid {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum RunError {
-    InvalidPath { path: String, reason: &'static str },
+    InvalidPath {
+        path: String,
+        reason: &'static str,
+    },
     AlreadyExists(PathBuf),
     SymbolicLink(PathBuf),
     Escapes(PathBuf),
     Relocated(PathBuf),
     NotADirectory(PathBuf),
     NotARegularFile(PathBuf),
-    Io { path: PathBuf, source: io::Error },
+    Io {
+        path: PathBuf,
+        source: io::Error,
+    },
+    /// The file is visible, but syncing its containing directory failed.
+    /// Artifact operations record provenance before returning this error.
+    PublishedButNotDurable {
+        path: PathBuf,
+        source: io::Error,
+    },
     Domain(DomainError),
     Metadata(MetadataError),
     Artifact(ReportError),
@@ -521,6 +534,11 @@ impl Display for RunError {
                 write!(formatter, "{} is not a regular file", path.display())
             }
             Self::Io { path, source } => write!(formatter, "{}: {source}", path.display()),
+            Self::PublishedButNotDurable { path, source } => write!(
+                formatter,
+                "{} was published, but directory synchronization failed: {source}",
+                path.display()
+            ),
             Self::Domain(error) => Display::fmt(error, formatter),
             Self::Metadata(error) => Display::fmt(error, formatter),
             Self::Artifact(error) => Display::fmt(error, formatter),
@@ -539,7 +557,7 @@ impl Error for RunError {
             | Self::Relocated(_)
             | Self::NotADirectory(_)
             | Self::NotARegularFile(_) => None,
-            Self::Io { source, .. } => Some(source),
+            Self::Io { source, .. } | Self::PublishedButNotDurable { source, .. } => Some(source),
             Self::Domain(error) => Some(error),
             Self::Metadata(error) => Some(error),
             Self::Artifact(error) => Some(error),
