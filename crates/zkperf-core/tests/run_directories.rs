@@ -313,6 +313,23 @@ fn a_run_root_swapped_for_a_link_stops_every_write() {
 
 #[cfg(unix)]
 #[test]
+fn replacing_the_root_with_another_directory_is_detected() {
+    let fixture = Fixture::new(SOURCE);
+    let plan = fixture.plan();
+    let mut run = RunDirectory::create(&plan).unwrap();
+    let root = run.path().to_path_buf();
+    fs::rename(&root, fixture.0.join("original-run")).unwrap();
+    fs::create_dir(&root).unwrap();
+
+    assert!(matches!(
+        run.store(&request("proof.bin", ArtifactKind::Proof), b"proof"),
+        Err(RunError::Relocated(_))
+    ));
+    assert_eq!(entries(&root), [] as [String; 0]);
+}
+
+#[cfg(unix)]
+#[test]
 fn an_output_directory_linked_after_loading_cannot_host_a_run() {
     use std::os::unix::fs::symlink;
 

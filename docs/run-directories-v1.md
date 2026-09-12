@@ -31,11 +31,10 @@ carries no separators. The directory is created exclusively: an existing name
 is an error, never a replacement. Two runs started in the same second still get
 distinct directories because the run ID differs.
 
-The manifest checked its output directory when it was loaded, which says
-nothing about the filesystem at run time. Creation confirms the suite root
-again, creates each level of the output directory itself while refusing any
-symbolic link it meets, and finally checks that the new run directory still
-resolves inside that suite root.
+Creation opens the canonical suite path one component at a time without
+following links. Each output directory and the new run directory is created
+relative to its open parent. The run retains its directory handle throughout
+execution; its absolute path is used for diagnostics and adapter requests.
 
 ## Identity
 
@@ -93,18 +92,19 @@ backslashes, trailing dots, and Windows device names such as `nul` or `com1`
 are rejected on every platform, so one layout stays portable and needs no URI
 or shell escaping.
 
-Resolution refuses a symbolic link at any component, including one planted
-inside the run directory, and refuses to adopt anything that is not a regular
-file. A rejected path never creates a file or a directory. Path handling is
-lexical plus a per-component link check rather than canonicalization, so a
-directory is never resolved through a link that a concurrent writer could
-replace.
+Lexical validation happens before filesystem changes. Parent directories are
+opened component by component with no-follow semantics, using `cap-std` and
+`cap-fs-ext`. Each operation holds its resolved parent open through creation,
+publication, cleanup, and syncing. Replacing that parent's name with a symlink
+cannot redirect the operation; on Unix it continues in the original directory
+even if that directory has been renamed. Windows directory handles prevent
+such renames while open. Adoption also refuses a link in the final component.
 
-The root itself is checked the same way before every operation: it must still
-be a real directory that resolves to itself. Replacing a finished run's
-directory with a link to somewhere else stops the next write instead of
-redirecting it. The standard library has no portable way to hold a directory
-open and resolve against that handle, so this check stands in for one.
+Before each operation the root's current device/inode identity is compared
+with the retained handle, detecting replacement by another real directory as
+well as a link. This is a diagnostic check; handle-relative operations provide
+protection against swaps after the check. These guarantees govern harness I/O,
+not arbitrary filesystem mutations made by another process with write access.
 
 ## Atomicity and interrupted runs
 

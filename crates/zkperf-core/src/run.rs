@@ -6,16 +6,19 @@ mod write;
 
 use std::error::Error;
 use std::fmt::{self, Display, Formatter};
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::{self, ErrorKind, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+use cap_std::fs::{Dir, OpenOptions};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 pub use record::{RunOutcome, RunRecord, RunState};
 
+use paths::RunPath;
 use record::RunRecordParts;
 
 use crate::{
@@ -42,6 +45,7 @@ const ATTEMPTS: &str = "attempts";
 #[derive(Debug)]
 pub struct RunDirectory {
     path: PathBuf,
+    directory: Dir,
     record: RunRecord,
     artifacts: Vec<Artifact>,
     stored: Vec<String>,
@@ -74,33 +78,27 @@ impl RunDirectory {
             ],
         ));
 
-        // The manifest checked its output directory when it was loaded. A link
-        // planted since then would put this run somewhere else entirely, so
-        // the suite root is confirmed again and every level below it is
-        // created here rather than trusted.
         let manifest_path = plan.manifest().manifest_path();
         let suite = manifest_path
             .parent()
             .ok_or_else(|| RunError::Escapes(manifest_path.to_path_buf()))?;
-        let suite = fs::canonicalize(suite).map_err(|error| RunError::io(suite, error))?;
-        let parent = paths::create_output_directory(&suite, plan.manifest().outputs().directory())?;
-
-        let path = parent.join(format!("{}-{run_id}", started_at.file_stamp()));
-        fs::create_dir(&path).map_err(|error| {
+        let output = plan.manifest().outputs().directory();
+        let parent = paths::create_output_directory(suite, output)?;
+        let name = format!("{}-{run_id}", started_at.file_stamp());
+        let path = output.join(&name);
+        parent.create_dir(&name).map_err(|error| {
             if error.kind() == ErrorKind::AlreadyExists {
                 RunError::AlreadyExists(path.clone())
             } else {
                 RunError::io(&path, error)
             }
         })?;
-        let path = fs::canonicalize(&path).map_err(|error| RunError::io(&path, error))?;
-        if !path.starts_with(&suite) {
-            return Err(RunError::Escapes(path));
-        }
+        let root = paths::open_child(&parent, name.as_ref(), &path)?;
+        paths::verify_root(&root, &path)?;
 
         let (manifest_digest, _) = crate::digest::hash_file(manifest_path)
             .map_err(|error| RunError::io(manifest_path, error))?;
-        let index = write::create_new(&path.join(ARTIFACT_INDEX))?;
+        let index = write::create_new(&RunPath::at(&root, &path, ARTIFACT_INDEX)?)?;
         let directory = Self {
             record: RunRecord::new(RunRecordParts {
                 run_id,
@@ -111,13 +109,17 @@ impl RunDirectory {
                 files: plan.files().to_vec(),
             }),
             path,
+            directory: root,
             artifacts: Vec::new(),
             stored: Vec::new(),
             index,
         };
 
         let snapshot = format!("{}\n", plan.normalized_debug()?);
-        write::publish_new(&directory.path.join(PLAN_SNAPSHOT), snapshot.as_bytes())?;
+        write::publish_new(
+            &RunPath::at(&directory.directory, &directory.path, PLAN_SNAPSHOT)?,
+            snapshot.as_bytes(),
+        )?;
         directory.publish_record()?;
         Ok(directory)
     }
@@ -169,7 +171,7 @@ impl RunDirectory {
             Sha256Digest::from_bytes(crate::digest::hash_bytes(contents)),
             ByteSize::new(contents.len() as u64),
         )?;
-        let path = paths::reserve(&self.path, &request.path)?;
+        let path = paths::reserve(&self.directory, &self.path, &request.path)?;
         write::publish_new(&path, contents)?;
         self.commit(&request.path, artifact)
     }
@@ -185,19 +187,22 @@ impl RunDirectory {
     /// Returns an error when the path could escape the run directory, is
     /// already recorded, is not a regular file, or cannot be hashed.
     pub fn adopt(&mut self, request: &ArtifactRequest) -> Result<Artifact, RunError> {
-        let path = paths::resolve(&self.path, &request.path)?;
-        // Hash the handle rather than the path: reopening it would leave room
-        // for a different file to answer to the name in between.
-        let mut file = File::open(&path).map_err(|error| RunError::io(&path, error))?;
+        let path = paths::resolve(&self.directory, &self.path, &request.path)?;
+        let mut options = OpenOptions::new();
+        options.read(true).follow(FollowSymlinks::No);
+        let mut file = path
+            .directory
+            .open_with(&path.name, &options)
+            .map_err(|error| RunError::io(&path.path, error))?;
         if !file
             .metadata()
-            .map_err(|error| RunError::io(&path, error))?
+            .map_err(|error| RunError::io(&path.path, error))?
             .is_file()
         {
-            return Err(RunError::NotARegularFile(path));
+            return Err(RunError::NotARegularFile(path.path));
         }
-        let (digest, byte_length) =
-            crate::digest::hash_reader(&mut file).map_err(|error| RunError::io(&path, error))?;
+        let (digest, byte_length) = crate::digest::hash_reader(&mut file)
+            .map_err(|error| RunError::io(&path.path, error))?;
         let artifact = self.artifact(request, digest, byte_length)?;
         self.commit(&request.path, artifact)
     }
@@ -213,7 +218,7 @@ impl RunDirectory {
     /// Returns an error when the path could escape the run directory, the file
     /// already exists, or it cannot be created.
     pub fn open_new(&self, relative: &str) -> Result<File, RunError> {
-        write::create_new(&paths::reserve(&self.path, relative)?)
+        write::create_new(&paths::reserve(&self.directory, &self.path, relative)?)
     }
 
     /// Creates the isolated workspace for one attempt at one planned job.
@@ -224,20 +229,26 @@ impl RunDirectory {
     /// workspace roots cannot be created.
     pub fn attempt(&self, job: &PlannedJob, attempt_index: u64) -> Result<RunWorkspace, RunError> {
         let relative = format!("{ATTEMPTS}/{:010}-{attempt_index:04}", job.position());
-        let root = paths::reserve(&self.path, &relative)?;
-        fs::create_dir(&root).map_err(|error| {
-            if error.kind() == ErrorKind::AlreadyExists {
-                RunError::AlreadyExists(root.clone())
-            } else {
-                RunError::io(&root, error)
-            }
-        })?;
+        let destination = paths::reserve(&self.directory, &self.path, &relative)?;
+        let root = destination.path;
+        destination
+            .directory
+            .create_dir(&destination.name)
+            .map_err(|error| {
+                if error.kind() == ErrorKind::AlreadyExists {
+                    RunError::AlreadyExists(root.clone())
+                } else {
+                    RunError::io(&root, error)
+                }
+            })?;
+        let directory =
+            paths::open_child(&destination.directory, destination.name.as_ref(), &root)?;
         for child in [
             RunWorkspace::INPUTS,
             RunWorkspace::OUTPUTS,
             RunWorkspace::CONTROL,
         ] {
-            paths::create_directory(&root.join(child))?;
+            paths::create_directory(&directory, child.as_ref(), &root.join(child))?;
         }
         Ok(RunWorkspace {
             attempt_id: AttemptId::new(derive(
@@ -263,7 +274,7 @@ impl RunDirectory {
     /// Returns an error when the system clock is unusable or the record cannot
     /// be published.
     pub fn finish(mut self, outcome: RunOutcome) -> Result<RunRecord, RunError> {
-        paths::verify_root(&self.path)?;
+        paths::verify_root(&self.directory, &self.path)?;
         let finished_at = Timestamp::now()?;
         self.index
             .sync_all()
@@ -318,7 +329,10 @@ impl RunDirectory {
 
     fn publish_record(&self) -> Result<(), RunError> {
         let record = format!("{}\n", serde_json::to_string_pretty(&self.record)?);
-        write::replace(&self.path.join(RUN_RECORD), record.as_bytes())
+        write::replace(
+            &RunPath::at(&self.directory, &self.path, RUN_RECORD)?,
+            record.as_bytes(),
+        )
     }
 }
 

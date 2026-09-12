@@ -1,6 +1,9 @@
-use std::fs;
+use std::ffi::OsStr;
 use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
+
+use cap_fs_ext::{DirExt, MetadataExt};
+use cap_std::{ambient_authority, fs::Dir};
 
 use super::{ARTIFACT_INDEX, PLAN_SNAPSHOT, RUN_RECORD, RunError};
 
@@ -84,99 +87,141 @@ pub(super) fn validate(relative: &str) -> Result<(), RunError> {
     segments(relative).map(drop)
 }
 
-/// Confirms the run root is still the directory the run created.
-///
-/// The standard library has no portable way to hold a directory open and
-/// resolve against that handle, so containment is checked before each
-/// operation instead: the root must still be a real directory that resolves to
-/// itself. A root swapped for a link, or moved under a replaced parent, is
-/// refused rather than followed.
-pub(super) fn verify_root(root: &Path) -> Result<(), RunError> {
-    let metadata = fs::symlink_metadata(root).map_err(|error| RunError::io(root, error))?;
-    if metadata.is_symlink() {
-        return Err(RunError::SymbolicLink(root.to_path_buf()));
-    }
-    if !metadata.is_dir() {
-        return Err(RunError::NotADirectory(root.to_path_buf()));
-    }
-    let canonical = fs::canonicalize(root).map_err(|error| RunError::io(root, error))?;
-    if canonical == root {
-        Ok(())
-    } else {
-        Err(RunError::Relocated(root.to_path_buf()))
+/// A single name inside an open directory. `path` is only for diagnostics;
+/// filesystem operations must use `directory` and `name` together.
+pub(super) struct RunPath {
+    pub directory: Dir,
+    pub name: String,
+    pub path: PathBuf,
+}
+
+impl RunPath {
+    pub fn at(directory: &Dir, root: &Path, name: &str) -> Result<Self, RunError> {
+        Ok(Self {
+            directory: directory
+                .try_clone()
+                .map_err(|error| RunError::io(root, error))?,
+            name: name.to_owned(),
+            path: root.join(name),
+        })
     }
 }
 
-/// Resolves a run-relative path under `root`, refusing every symbolic link on
-/// the way so the result stays inside the run directory.
-pub(super) fn resolve(root: &Path, relative: &str) -> Result<PathBuf, RunError> {
-    verify_root(root)?;
-    let mut path = root.to_path_buf();
-    for segment in segments(relative)? {
-        path.push(segment);
-        reject_link(&path)?;
+/// This check diagnoses relocation. Subsequent I/O still uses the original
+/// handle, so a rename after this check cannot redirect that I/O.
+pub(super) fn verify_root(directory: &Dir, root: &Path) -> Result<(), RunError> {
+    let current = open_absolute(root)?;
+    let current = current
+        .dir_metadata()
+        .map_err(|error| RunError::io(root, error))?;
+    let original = directory
+        .dir_metadata()
+        .map_err(|error| RunError::io(root, error))?;
+    if current.dev() != original.dev() || current.ino() != original.ino() {
+        return Err(RunError::Relocated(root.to_path_buf()));
     }
-    Ok(path)
+    Ok(())
 }
 
-/// Resolves a run-relative path and creates the directories leading to it.
-pub(super) fn reserve(root: &Path, relative: &str) -> Result<PathBuf, RunError> {
-    verify_root(root)?;
+pub(super) fn resolve(directory: &Dir, root: &Path, relative: &str) -> Result<RunPath, RunError> {
+    parent(directory, root, relative, false)
+}
+
+pub(super) fn reserve(directory: &Dir, root: &Path, relative: &str) -> Result<RunPath, RunError> {
+    parent(directory, root, relative, true)
+}
+
+fn parent(directory: &Dir, root: &Path, relative: &str, create: bool) -> Result<RunPath, RunError> {
     let segments = segments(relative)?;
     let (name, parents) = segments
         .split_last()
         .ok_or_else(|| RunError::invalid_path(relative, "must not be empty"))?;
+    verify_root(directory, root)?;
+    let mut directory = directory
+        .try_clone()
+        .map_err(|error| RunError::io(root, error))?;
     let mut path = root.to_path_buf();
     for segment in parents {
         path.push(segment);
-        create_directory(&path)?;
+        directory = if create {
+            create_directory(&directory, segment.as_ref(), &path)?
+        } else {
+            open_child(&directory, segment.as_ref(), &path)?
+        };
     }
     path.push(name);
-    reject_link(&path)?;
-    Ok(path)
+    reject_link(&directory, name.as_ref(), &path)?;
+    Ok(RunPath {
+        directory,
+        name: (*name).to_owned(),
+        path,
+    })
 }
 
-/// Creates the manifest's output directory under the suite root it was
-/// resolved against, refusing any link planted since the manifest was loaded.
-pub(super) fn create_output_directory(
-    anchor: &Path,
-    directory: &Path,
-) -> Result<PathBuf, RunError> {
-    let suffix = directory
+/// Opens a canonical absolute path without following any replaced ancestor.
+fn open_absolute(root: &Path) -> Result<Dir, RunError> {
+    let anchor = root
+        .ancestors()
+        .last()
+        .ok_or_else(|| RunError::Escapes(root.to_path_buf()))?;
+    if !anchor.is_absolute() {
+        return Err(RunError::Escapes(root.to_path_buf()));
+    }
+    let mut directory = Dir::open_ambient_dir(anchor, ambient_authority())
+        .map_err(|error| RunError::io(anchor, error))?;
+    let mut path = anchor.to_path_buf();
+    for component in root
         .strip_prefix(anchor)
-        .map_err(|_| RunError::Escapes(directory.to_path_buf()))?;
+        .map_err(|_| RunError::Escapes(root.to_path_buf()))?
+        .components()
+    {
+        let Component::Normal(name) = component else {
+            return Err(RunError::Escapes(root.to_path_buf()));
+        };
+        path.push(name);
+        directory = open_child(&directory, name, &path)?;
+    }
+    Ok(directory)
+}
+
+pub(super) fn create_output_directory(anchor: &Path, output: &Path) -> Result<Dir, RunError> {
+    let suffix = output
+        .strip_prefix(anchor)
+        .map_err(|_| RunError::Escapes(output.to_path_buf()))?;
+    let mut directory = open_absolute(anchor)?;
     let mut path = anchor.to_path_buf();
     for component in suffix.components() {
         let Component::Normal(segment) = component else {
-            return Err(RunError::Escapes(directory.to_path_buf()));
+            return Err(RunError::Escapes(output.to_path_buf()));
         };
         path.push(segment);
-        create_directory(&path)?;
+        directory = create_directory(&directory, segment, &path)?;
     }
-    Ok(path)
+    Ok(directory)
 }
 
-/// Creates one directory, accepting only an existing real directory as the
-/// already-created case.
-pub(super) fn create_directory(path: &Path) -> Result<(), RunError> {
-    match fs::create_dir(path) {
-        Ok(()) => Ok(()),
-        Err(error) if error.kind() == ErrorKind::AlreadyExists => {
-            let metadata = fs::symlink_metadata(path).map_err(|error| RunError::io(path, error))?;
-            if metadata.is_symlink() {
-                Err(RunError::SymbolicLink(path.to_path_buf()))
-            } else if metadata.is_dir() {
-                Ok(())
-            } else {
-                Err(RunError::NotADirectory(path.to_path_buf()))
-            }
-        }
-        Err(error) => Err(RunError::io(path, error)),
+pub(super) fn create_directory(
+    directory: &Dir,
+    name: &OsStr,
+    path: &Path,
+) -> Result<Dir, RunError> {
+    match directory.create_dir(name) {
+        Ok(()) => {}
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
+        Err(error) => return Err(RunError::io(path, error)),
     }
+    open_child(directory, name, path)
 }
 
-fn reject_link(path: &Path) -> Result<(), RunError> {
-    match fs::symlink_metadata(path) {
+pub(super) fn open_child(directory: &Dir, name: &OsStr, path: &Path) -> Result<Dir, RunError> {
+    reject_link(directory, name, path)?;
+    directory
+        .open_dir_nofollow(name)
+        .map_err(|error| RunError::io(path, error))
+}
+
+fn reject_link(directory: &Dir, name: &OsStr, path: &Path) -> Result<(), RunError> {
+    match directory.symlink_metadata(name) {
         Ok(metadata) if metadata.is_symlink() => Err(RunError::SymbolicLink(path.to_path_buf())),
         Ok(_) => Ok(()),
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
