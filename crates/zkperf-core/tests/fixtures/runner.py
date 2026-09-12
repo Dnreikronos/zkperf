@@ -69,7 +69,8 @@ response = next(item["response"] for item in catalog["exchanges"]
 response.update({key: request[key] for key in
                  ("protocol", "protocol_version", "request_id", "operation")})
 if mode in {"lifecycle", "bad-artifact", "oversized-artifact", "prepared-inputs",
-            "colliding-artifacts", "bad-initial-format", "bad-transformed-format"} or mode.startswith("large-limit-"):
+            "colliding-artifacts", "bad-initial-format", "bad-transformed-format",
+            "reject-setup"} or mode.startswith("large-limit-"):
     params = request["params"]
     inputs = []
     for key in ("input_artifacts", "prepared_artifacts", "artifacts", "canonical_input", "proof"):
@@ -90,6 +91,7 @@ if mode in {"lifecycle", "bad-artifact", "oversized-artifact", "prepared-inputs"
         if mode.startswith("large-limit-"):
             result["limits"][mode.removeprefix("large-limit-")] = 18446744073709551616
     if operation == "prepare":
+        assert mode != "reject-setup" or params["stage"] != "setup"
         result["stage"] = params["stage"]
         result["prepared_artifact_ids"] = ["prepared-" + params["stage"]]
         response["artifacts"][0]["id"] = result["prepared_artifact_ids"][0]

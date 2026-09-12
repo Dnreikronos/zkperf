@@ -51,13 +51,14 @@ pub(super) fn execute(session: &mut Session<'_>) -> Result<(), RunError> {
                 | StandardPhase::Verification
         )
     });
+    let needs_setup = needs_execution || phases.contains(&StandardPhase::Setup);
     let advertised = session.capabilities["operations"]["prepare"]["stages"]
         .as_array()
         .cloned()
         .unwrap_or_default();
     let stages = ["environment", "build", "setup"]
         .into_iter()
-        .filter(|stage| advertised.contains(&json!(stage)));
+        .filter(|stage| advertised.contains(&json!(stage)) && (*stage != "setup" || needs_setup));
     let mut prepared = Vec::<Value>::new();
     for stage in stages {
         let name = stage;
@@ -122,12 +123,19 @@ fn prove_and_verify(
         "proving",
     )?;
     let mut proof = proof_artifact(&initial, &mode["proof_format"])?;
-    for transformation in mode["transformations"].as_array().unwrap() {
-        let mut inputs = prepared.to_vec();
-        inputs.push(proof);
-        let transformed = session.invoke("prove", json!({"stage":"transform","transformation_id":transformation["id"],
-            "benchmark":benchmark,"configuration":configuration,"proof_mode_id":mode["id"],"input_artifacts":inputs}), "compression")?;
-        proof = proof_artifact(&transformed, &transformation["output_format"])?;
+    if session.workload.phases().iter().any(|phase| {
+        matches!(
+            phase,
+            StandardPhase::Compression | StandardPhase::Verification
+        )
+    }) {
+        for transformation in mode["transformations"].as_array().unwrap() {
+            let mut inputs = prepared.to_vec();
+            inputs.push(proof);
+            let transformed = session.invoke("prove", json!({"stage":"transform","transformation_id":transformation["id"],
+                "benchmark":benchmark,"configuration":configuration,"proof_mode_id":mode["id"],"input_artifacts":inputs}), "compression")?;
+            proof = proof_artifact(&transformed, &transformation["output_format"])?;
+        }
     }
     if session
         .workload
