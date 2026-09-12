@@ -1,0 +1,93 @@
+manifest_version = "1.0.0"
+
+[run]
+warmups = 1
+runs = 2
+
+[run.policy]
+ordering_algorithm = "seeded_round_robin_v1"
+seed = 42
+retry_policy = "no retries except replacements for invalid attempts"
+invalidation_policy = "replace only verified harness or external interference"
+outlier_rule = "none"
+percentile_method = "linear"
+
+[run.policy.concurrency]
+mode = "isolated"
+parallel_attempts = 1
+
+[run.resources]
+power_profile = "performance"
+cpu_affinity = [0]
+cpu_limit = 1
+memory_limit_bytes = 1_073_741_824
+worker_count = 1
+accelerator_allocation = []
+environment_variables = {}
+execution_mode = "local"
+network_access = false
+
+[[run.timeouts]]
+phase = "build"
+limit_ms = 5_000
+termination_grace_ms = 500
+
+[[run.timeouts]]
+phase = "setup"
+limit_ms = 5_000
+termination_grace_ms = 500
+
+[[run.timeouts]]
+phase = "execution"
+limit_ms = 5_000
+termination_grace_ms = 500
+
+[[run.timeouts]]
+phase = "proving"
+limit_ms = 5_000
+termination_grace_ms = 500
+
+[[run.timeouts]]
+phase = "compression"
+limit_ms = 5_000
+termination_grace_ms = 500
+
+[[run.timeouts]]
+phase = "verification"
+limit_ms = 5_000
+termination_grace_ms = 500
+
+[outputs]
+directory = "results"
+formats = ["json", "terminal"]
+
+[[workloads]]
+id = "mock-sha256"
+revision = "fixture-v1"
+specification = "workload.md"
+implementation_lane = "portable"
+security_target_bits = 128
+phases = ["build", "setup", "execution", "proving", "compression", "verification"]
+
+[[workloads.inputs]]
+id = "small"
+fixture = "input.txt"
+expected_output = "output.txt"
+visibility = "public"
+preprocessing = "none"
+commit_input = "digest"
+commit_output = "bytes"
+
+[[engines]]
+id = "mock"
+adapter = "mock.zkperf-adapter.json"
+proof_modes = ["mock-core"]
+
+[engines.configuration]
+backend = "local-cpu"
+
+[engines.configuration.mock]
+target = "all"
+fault = "none"
+delay_ms = 0
+memory_bytes = 0

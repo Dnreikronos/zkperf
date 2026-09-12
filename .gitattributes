@@ -1,1 +1,2 @@
 *.bin binary
+/examples/mock/* text eol=lf
