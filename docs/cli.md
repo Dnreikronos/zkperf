@@ -6,7 +6,8 @@ and delegate manifest validation and invariant checks to `zkperf-core`.
 ## Commands
 
 - `zkperf init [DIRECTORY] [--force]`: initialize a benchmark directory (default
-  `.`). Template generation belongs to issue #8.
+  `.`) without prompting. See [starter generation](init.md) for its files and
+  overwrite policy. Success prints a validation command as the next action.
 - `zkperf validate [--manifest FILE] [--print-config]`: validate a manifest and
   its effective configuration. Print deterministic, redacted JSON when requested.
 - `zkperf run [--manifest FILE] [--print-config]`: resolve benchmark configuration;
@@ -17,7 +18,7 @@ and delegate manifest validation and invariant checks to `zkperf-core`.
 - `zkperf compare BASELINE CANDIDATE [--format FORMAT] [--output FILE]`:
   compare stored reports. Comparison and regression policy belong to issue #22.
 
-Until their respective services exist, `init`, executing `run`, `report`, and
+Until their respective services exist, executing `run`, `report`, and
 `compare` return an explicit unavailable diagnostic and exit 5. They never
 create files or report a successful benchmark. All commands provide `--help`.
 
@@ -70,7 +71,7 @@ Stdout contains only command results or requested help/version output.
 | 0 | Success, help or version |
 | 2 | CLI usage: unknown/missing/conflicting arguments or invalid flag value |
 | 3 | Configuration: invalid environment or manifest (including inaccessible manifest files/fixtures) |
-| 4 | I/O: writing CLI output failed |
+| 4 | I/O: initialization conflict, filesystem failure, or writing CLI output failed |
 | 5 | Requested service is not implemented |
 
 Future execution and comparison services must add distinct statuses for runtime

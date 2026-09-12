@@ -12,7 +12,22 @@ pub fn execute(
     match command {
         Command::Validate(args) => benchmark(args, false, env, logger),
         Command::Run(args) => benchmark(args, true, env, logger),
-        Command::Init(_) => Err(Diagnostic::unavailable("init", "issue #8")),
+        Command::Init(args) => {
+            zkperf_core::initialize(&args.directory, args.force)?;
+            let manifest = args.directory.join("zkperf.toml");
+            let path = manifest.to_string_lossy();
+            // Single quotes protect spaces and shell metacharacters in POSIX
+            // shells and PowerShell; their embedded-quote escapes differ.
+            let quoted = if cfg!(windows) {
+                path.replace('\'', "''")
+            } else {
+                path.replace('\'', "'\"'\"'")
+            };
+            Ok(format!(
+                "Created starter manifest: {}\nNext: zkperf validate --manifest '{quoted}'",
+                manifest.display()
+            ))
+        }
         Command::Report(args) => {
             config::format(args.format, env, Format::Terminal)?;
             Err(Diagnostic::unavailable("report", "issues #16, #20 and #21"))
