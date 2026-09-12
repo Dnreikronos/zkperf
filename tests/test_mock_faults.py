@@ -87,6 +87,45 @@ class MockFaultTests(unittest.TestCase):
         )
         subprocess.run([sys.executable, "-B", "-c", script, str(ADAPTER.parent)], check=True, timeout=5)
 
+    def test_metadata_reports_resolved_resource_overrides(self):
+        request = self.client.request("metadata")
+        request["params"]["configuration"]["mock"] = {
+            "target": "all", "fault": "none", "delay_ms": 0, "memory_bytes": 0}
+        original = copy.deepcopy(request)
+        response, _ = self.client.invoke(
+            request, arguments=["--delay-ms", "120", "--memory-bytes", "1048576"])
+        self.assertEqual({"backend": "local-cpu", "mock": {
+            "target": "all", "fault": "none", "delay_ms": 120, "memory_bytes": 1048576,
+        }}, response["result"]["configuration"])
+        self.assertEqual(original, request)
+
+    def test_metadata_preserves_settings_for_other_stages(self):
+        for override_target in (False, True):
+            with self.subTest(override_target=override_target):
+                request = self.client.request("metadata")
+                request["params"]["configuration"]["mock"] = {
+                    "target": "metadata" if override_target else "prove.initial",
+                    "fault": "error", "delay_ms": 0, "memory_bytes": 0}
+                arguments = ["--fault", "unsupported", "--delay-ms", "30000", "--memory-bytes", "1048576"]
+                if override_target:
+                    arguments.extend(["--target", "prove.initial"])
+                response, _ = self.client.invoke(request, arguments=arguments)
+                self.assertEqual({"backend": "local-cpu", "mock": {
+                    "target": "prove.initial", "fault": "unsupported",
+                    "delay_ms": 30000, "memory_bytes": 1048576,
+                }}, response["result"]["configuration"])
+
+    def test_metadata_includes_defaults_and_explicit_zero_overrides(self):
+        request = self.client.request("metadata")
+        response, _ = self.client.invoke(request)
+        self.assertEqual({"target": "all", "fault": "none", "delay_ms": 0, "memory_bytes": 0},
+                         response["result"]["configuration"]["mock"])
+        request["params"]["configuration"]["mock"] = {
+            "fault": "error", "delay_ms": 30000, "memory_bytes": 1048576}
+        overridden, _ = self.client.invoke(request, arguments=[
+            "--fault", "none", "--delay-ms", "0", "--memory-bytes", "0"])
+        self.assertEqual(response["result"]["configuration"], overridden["result"]["configuration"])
+
     def test_delay_cancellation_checks_correlation_and_deadline_reason(self):
         for reason in ("user_cancelled", "deadline_exceeded"):
             request = self.client.request("capabilities")

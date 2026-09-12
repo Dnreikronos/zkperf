@@ -30,6 +30,10 @@ def settings(request, arguments):
     for key, limit in (("delay_ms", 3_600_000), ("memory_bytes", 256 * 1024 * 1024)):
         if type(options[key]) is not int or not 0 <= options[key] <= limit:
             raise Failure("invalid_configuration", "Mock resource setting is out of range.")
+    return options
+
+
+def for_operation(request, options):
     if options["target"] not in ("all", request["operation"], operation_key(request)):
         return {"fault": "none", "delay_ms": 0, "memory_bytes": 0}
     return options

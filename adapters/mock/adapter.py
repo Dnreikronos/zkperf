@@ -40,7 +40,8 @@ def main():
         print("mock: invalid request: " + str(error), file=sys.stderr)
         return 64
     try:
-        options = faults.settings(request, arguments)
+        resolved = faults.settings(request, arguments)
+        options = faults.for_operation(request, resolved)
         memory = faults.before(request, options)
         inputs = read_inputs(request)
         response = envelope(request)
@@ -48,7 +49,7 @@ def main():
         if operation == "capabilities":
             result = capabilities()
         elif operation == "metadata":
-            result = metadata(request["params"]["configuration"])
+            result = metadata({**request["params"]["configuration"], "mock": resolved})
         else:
             result = workload.run(request, response, inputs)
         if operation in ("prepare", "execute", "prove"):
