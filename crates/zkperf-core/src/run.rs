@@ -105,7 +105,7 @@ impl RunDirectory {
         };
 
         let snapshot = format!("{}\n", plan.normalized_debug()?);
-        write::atomic(&directory.path.join(PLAN_SNAPSHOT), snapshot.as_bytes())?;
+        write::publish_new(&directory.path.join(PLAN_SNAPSHOT), snapshot.as_bytes())?;
         directory.publish_record()?;
         Ok(directory)
     }
@@ -134,8 +134,9 @@ impl RunDirectory {
     /// Writes `contents` to a run-relative path and records its integrity
     /// hash.
     ///
-    /// The file is published by renaming a completed temporary file, so a
-    /// reader never observes a partial canonical result.
+    /// The file is written in full before it is published under its own name,
+    /// so a reader never observes a partial canonical result and never loses a
+    /// file another writer published first.
     ///
     /// # Errors
     ///
@@ -157,12 +158,7 @@ impl RunDirectory {
             ByteSize::new(contents.len() as u64),
         )?;
         let path = paths::reserve(&self.path, &request.path)?;
-        match fs::symlink_metadata(&path) {
-            Ok(_) => return Err(RunError::AlreadyExists(path)),
-            Err(error) if error.kind() == ErrorKind::NotFound => {}
-            Err(error) => return Err(RunError::io(&path, error)),
-        }
-        write::atomic(&path, contents)?;
+        write::publish_new(&path, contents)?;
         self.commit(&request.path, artifact)
     }
 
@@ -303,7 +299,7 @@ impl RunDirectory {
 
     fn publish_record(&self) -> Result<(), RunError> {
         let record = format!("{}\n", serde_json::to_string_pretty(&self.record)?);
-        write::atomic(&self.path.join(RUN_RECORD), record.as_bytes())
+        write::replace(&self.path.join(RUN_RECORD), record.as_bytes())
     }
 }
 

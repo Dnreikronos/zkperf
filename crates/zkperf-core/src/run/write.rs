@@ -26,9 +26,31 @@ pub(super) fn create_new(path: &Path) -> Result<File, RunError> {
         })
 }
 
-/// Publishes `contents` at `path` by renaming a completed temporary file, so a
-/// reader observes either the previous file or the whole new one.
-pub(super) fn atomic(path: &Path, contents: &[u8]) -> Result<(), RunError> {
+/// Publishes `contents` at a path nothing else owns.
+///
+/// The completed temporary file is linked into place, which fails when the
+/// destination appeared after the caller checked for it. A rename would report
+/// success while replacing that writer's evidence.
+pub(super) fn publish_new(path: &Path, contents: &[u8]) -> Result<(), RunError> {
+    let (directory, temporary) = write_temporary(path, contents)?;
+    let result = fs::hard_link(&temporary, path).map_err(|error| {
+        if error.kind() == ErrorKind::AlreadyExists {
+            RunError::AlreadyExists(path.to_path_buf())
+        } else {
+            RunError::io(path, error)
+        }
+    });
+    // The published name now has its own link to the completed contents.
+    drop(fs::remove_file(&temporary));
+    result?;
+    sync_directory(directory)
+}
+
+/// Replaces `path` with `contents` so a reader observes either the previous
+/// file or the whole new one.
+///
+/// Only the run's own canonical record is rewritten this way.
+pub(super) fn replace(path: &Path, contents: &[u8]) -> Result<(), RunError> {
     let (directory, temporary) = write_temporary(path, contents)?;
     if let Err(error) = fs::rename(&temporary, path) {
         drop(fs::remove_file(&temporary));
@@ -77,7 +99,7 @@ fn sync_directory(directory: &Path) -> Result<(), RunError> {
 
 #[cfg(not(unix))]
 fn sync_directory(_directory: &Path) -> Result<(), RunError> {
-    // Windows has no portable directory handle to flush; the rename itself is
+    // Windows has no portable directory handle to flush; publication itself is
     // the durability boundary.
     Ok(())
 }
@@ -87,7 +109,7 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use super::{atomic, create_temporary};
+    use super::{RunError, create_temporary, publish_new};
 
     struct Directory(PathBuf);
 
@@ -126,9 +148,28 @@ mod tests {
         fs::write(&planted, b"evidence").unwrap();
 
         let published = directory.0.join("proof.bin");
-        atomic(&published, b"proof").unwrap();
+        publish_new(&published, b"proof").unwrap();
 
         assert_eq!(fs::read(&planted).unwrap(), b"evidence");
         assert_eq!(fs::read(&published).unwrap(), b"proof");
+    }
+
+    #[test]
+    fn publication_refuses_a_destination_another_writer_created() {
+        let directory = Directory::new("publish");
+        let published = directory.0.join("proof.bin");
+        fs::write(&published, b"first").unwrap();
+
+        let error = publish_new(&published, b"second").unwrap_err();
+
+        assert!(matches!(error, RunError::AlreadyExists(_)), "{error}");
+        assert_eq!(fs::read(&published).unwrap(), b"first");
+        assert!(!fs::read_dir(&directory.0).unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".tmp")
+        }));
     }
 }

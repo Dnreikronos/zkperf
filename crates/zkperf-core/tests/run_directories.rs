@@ -225,6 +225,32 @@ fn rejected_requests_leave_no_evidence_behind() {
     ));
 }
 
+#[test]
+fn a_destination_that_appears_first_is_never_replaced() {
+    let fixture = Fixture::new(SOURCE);
+    let plan = fixture.plan();
+    let mut run = RunDirectory::create(&plan).unwrap();
+
+    // Nothing recorded this path, so only publication can refuse it.
+    let mut existing = run.open_new("artifacts/proof.bin").unwrap();
+    existing.write_all(b"written first").unwrap();
+    existing.flush().unwrap();
+
+    let error = run
+        .store(
+            &request("artifacts/proof.bin", ArtifactKind::Proof),
+            b"late",
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, RunError::AlreadyExists(_)), "{error}");
+    assert_eq!(
+        fs::read(run.path().join("artifacts").join("proof.bin")).unwrap(),
+        b"written first"
+    );
+    assert!(run.artifacts().is_empty());
+}
+
 #[cfg(unix)]
 #[test]
 fn symbolic_links_inside_a_run_directory_are_refused() {
