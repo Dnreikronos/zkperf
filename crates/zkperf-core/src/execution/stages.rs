@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use crate::{RunError, StandardPhase, runner::wire::invalid};
 
-use super::session::Session;
+use super::session::{InvocationResult, Session};
 
 pub(super) fn execute(session: &mut Session<'_>) -> Result<(), RunError> {
     session.negotiate()?;
@@ -42,6 +42,15 @@ pub(super) fn execute(session: &mut Session<'_>) -> Result<(), RunError> {
     }
     let configuration = json!(session.engine.configuration());
     let benchmark = session.benchmark.clone();
+    let needs_execution = phases.iter().any(|phase| {
+        matches!(
+            phase,
+            StandardPhase::Execution
+                | StandardPhase::Proving
+                | StandardPhase::Compression
+                | StandardPhase::Verification
+        )
+    });
     let advertised = session.capabilities["operations"]["prepare"]["stages"]
         .as_array()
         .cloned()
@@ -57,22 +66,12 @@ pub(super) fn execute(session: &mut Session<'_>) -> Result<(), RunError> {
             params["cache"] = json!({"state":"cold"});
         }
         let result = session.invoke("prepare", params, name)?;
-        if let Some(ids) = result["prepared_artifact_ids"].as_array() {
+        if let Some(ids) = result.result["prepared_artifact_ids"].as_array() {
             for id in ids {
-                prepared.retain(|prior| prior["id"] != *id);
-                prepared.push(session.artifacts[id.as_str().unwrap()].clone());
+                prepared.push(result.artifact(id)?);
             }
         }
     }
-    let needs_execution = phases.iter().any(|phase| {
-        matches!(
-            phase,
-            StandardPhase::Execution
-                | StandardPhase::Proving
-                | StandardPhase::Compression
-                | StandardPhase::Verification
-        )
-    });
     if !needs_execution {
         return Ok(());
     }
@@ -80,7 +79,7 @@ pub(super) fn execute(session: &mut Session<'_>) -> Result<(), RunError> {
         return Err(invalid("execution is unsupported"));
     }
     let mut params = json!({"benchmark":benchmark,"configuration":configuration,
-        "canonical_input":session.artifacts["canonical-input"],"prepared_artifacts":prepared});
+        "canonical_input":session.canonical_input,"prepared_artifacts":prepared});
     if let Some(mode) = &mode {
         params["proof_mode_id"] = mode.clone().into();
     }
@@ -96,6 +95,7 @@ pub(super) fn execute(session: &mut Session<'_>) -> Result<(), RunError> {
     prove_and_verify(
         session,
         &execution,
+        &prepared,
         proof_mode
             .as_ref()
             .ok_or_else(|| invalid("proving requires a proof mode"))?,
@@ -104,7 +104,8 @@ pub(super) fn execute(session: &mut Session<'_>) -> Result<(), RunError> {
 
 fn prove_and_verify(
     session: &mut Session<'_>,
-    execution: &Value,
+    execution: &InvocationResult,
+    prepared: &[Value],
     mode: &Value,
 ) -> Result<(), RunError> {
     if session.capabilities["operations"]["prove"]["supported"] != true {
@@ -112,17 +113,21 @@ fn prove_and_verify(
     }
     let benchmark = session.benchmark.clone();
     let configuration = json!(session.engine.configuration());
-    let trace = session.artifacts[execution["execution_artifact_id"].as_str().unwrap()].clone();
-    let mut proof = session.invoke(
+    let mut inputs = prepared.to_vec();
+    inputs.push(execution.artifact(&execution.result["execution_artifact_id"])?);
+    let initial = session.invoke(
         "prove",
         json!({"stage":"initial","benchmark":benchmark,
-        "configuration":configuration,"proof_mode_id":mode["id"],"input_artifacts":[trace]}),
+        "configuration":configuration,"proof_mode_id":mode["id"],"input_artifacts":inputs}),
         "proving",
     )?;
+    let mut proof = initial.artifact(&initial.result["proof_artifact_id"])?;
     for transformation in mode["transformations"].as_array().unwrap() {
-        let artifact = session.artifacts[proof["proof_artifact_id"].as_str().unwrap()].clone();
-        proof = session.invoke("prove", json!({"stage":"transform","transformation_id":transformation["id"],
-            "benchmark":benchmark,"configuration":configuration,"proof_mode_id":mode["id"],"input_artifacts":[artifact]}), "compression")?;
+        let mut inputs = prepared.to_vec();
+        inputs.push(proof);
+        let transformed = session.invoke("prove", json!({"stage":"transform","transformation_id":transformation["id"],
+            "benchmark":benchmark,"configuration":configuration,"proof_mode_id":mode["id"],"input_artifacts":inputs}), "compression")?;
+        proof = transformed.artifact(&transformed.result["proof_artifact_id"])?;
     }
     if session
         .workload
@@ -132,13 +137,12 @@ fn prove_and_verify(
         if session.capabilities["operations"]["verify"]["supported"] != true {
             return Err(invalid("verification is unsupported"));
         }
-        let artifact = session.artifacts[proof["proof_artifact_id"].as_str().unwrap()].clone();
-        let commitments = execution["commitment_digests"].clone();
+        let commitments = execution.result["commitment_digests"].clone();
         let verification = session.invoke("verify", json!({"benchmark":benchmark,"configuration":configuration,
-            "proof_mode_id":mode["id"],"proof":artifact,
+            "proof_mode_id":mode["id"],"proof":proof,
             "statement":{"workload":benchmark["case_id"],"input_commitment":commitments["input"]["value"],"output_commitment":commitments["output"]["value"]},
             "expected_output_digest":benchmark["expected_output_digest"],"expected_commitment_digests":commitments}), "verification")?;
-        if verification["verdict"] != "accepted" {
+        if verification.result["verdict"] != "accepted" {
             return Err(invalid("proof verification rejected the statement"));
         }
     }

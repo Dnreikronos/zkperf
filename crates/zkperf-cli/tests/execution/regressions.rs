@@ -44,6 +44,22 @@ fn operations(fixture: &Fixture) -> Vec<String> {
 }
 
 #[test]
+fn proving_receives_prepared_keys_and_parameters_in_each_fresh_workspace() {
+    let fixture = Fixture::new();
+    adapter(&fixture, "prepared-inputs");
+    assert_status(&run(&fixture), 0);
+    assert_state(&fixture, "completed");
+}
+
+#[test]
+fn response_local_artifact_ids_do_not_replace_fixtures_or_prior_outputs() {
+    let fixture = Fixture::new();
+    adapter(&fixture, "colliding-artifacts");
+    assert_status(&run(&fixture), 0);
+    assert_state(&fixture, "completed");
+}
+
+#[test]
 fn out_of_range_capability_limits_fail_without_panicking() {
     for limit in [
         "max_protocol_stdout_bytes",

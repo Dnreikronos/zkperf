@@ -68,16 +68,21 @@ response = next(item["response"] for item in catalog["exchanges"]
                 if item["request"]["operation"] == request["operation"])
 response.update({key: request[key] for key in
                  ("protocol", "protocol_version", "request_id", "operation")})
-if mode in {"lifecycle", "bad-artifact", "oversized-artifact"} or mode.startswith("large-limit-"):
+if mode in {"lifecycle", "bad-artifact", "oversized-artifact", "prepared-inputs",
+            "colliding-artifacts"} or mode.startswith("large-limit-"):
     params = request["params"]
+    inputs = []
     for key in ("input_artifacts", "prepared_artifacts", "artifacts", "canonical_input", "proof"):
         entries = params.get(key, [])
         if isinstance(entries, dict):
             entries = [entries]
+        inputs.extend(entries)
         for entry in entries:
             data = Path(entry["path"]).read_bytes()
             assert len(data) == entry["byte_length"]
             assert hashlib.sha256(data).hexdigest() == entry["digest"]["value"]
+    assert len({entry["id"] for entry in inputs}) == len(inputs)
+    assert len({entry["path"] for entry in inputs}) == len(inputs)
     operation = request["operation"]
     result = response["result"]
     if operation == "capabilities":
@@ -88,7 +93,18 @@ if mode in {"lifecycle", "bad-artifact", "oversized-artifact"} or mode.startswit
         result["stage"] = params["stage"]
         result["prepared_artifact_ids"] = ["prepared-" + params["stage"]]
         response["artifacts"][0]["id"] = result["prepared_artifact_ids"][0]
+        response["artifacts"][0]["kind"] = {
+            "environment": "parameters", "build": "guest_program", "setup": "proving_key",
+        }[params["stage"]]
     if operation == "prove":
+        if mode in {"prepared-inputs", "colliding-artifacts"}:
+            for kind, data in (("parameters", b"prepared-environment"),
+                               ("guest_program", b"prepared-build"),
+                               ("proving_key", b"prepared-setup")):
+                entry = next(entry for entry in inputs if entry["kind"] == kind)
+                assert Path(entry["path"]).read_bytes() == data
+            required = "execution_trace" if params["stage"] == "initial" else "proof"
+            assert any(entry["kind"] == required for entry in inputs)
         result["stage"] = params["stage"]
         result["proof_mode_id"] = params["proof_mode_id"]
         if params["stage"] == "transform":
@@ -104,6 +120,14 @@ if mode in {"lifecycle", "bad-artifact", "oversized-artifact"} or mode.startswit
             data = (Path(__file__).parent / "manifest/output.bin").read_bytes()
         else:
             data = artifact["id"].encode()
+        if mode == "colliding-artifacts" and artifact["kind"] not in {"canonical_output", "public_values"}:
+            original_id = artifact["id"]
+            artifact["id"] = "canonical-input"
+            for key, value in list(result.items()):
+                if key.endswith("_artifact_id") and value == original_id:
+                    result[key] = artifact["id"]
+                elif key.endswith("_artifact_ids"):
+                    result[key] = [artifact["id"] if item == original_id else item for item in value]
         artifact["path"] = "outputs/" + artifact["id"]
         artifact["byte_length"] = len(data)
         artifact["digest"]["value"] = hashlib.sha256(data).hexdigest()
@@ -113,6 +137,13 @@ if mode in {"lifecycle", "bad-artifact", "oversized-artifact"} or mode.startswit
         if mode == "oversized-artifact":
             Path(artifact["path"]).write_bytes(data * 1000)
     if operation == "execute":
+        assert params["canonical_input"]["kind"] == "canonical_input"
+        assert Path(params["canonical_input"]["path"]).read_bytes() == (
+            Path(__file__).parent / "manifest/input.bin").read_bytes()
+        if mode == "colliding-artifacts":
+            assert {Path(entry["path"]).read_bytes() for entry in params["prepared_artifacts"]} == {
+                b"prepared-environment", b"prepared-build", b"prepared-setup",
+            }
         result["commitment_digests"] = {
             "input": params["canonical_input"]["digest"],
             "output": params["benchmark"]["expected_output_digest"],

@@ -12,6 +12,20 @@ use crate::{
     RunError, RunWorkspace, RunnerLimits, run_operation,
 };
 
+pub(super) struct InvocationResult {
+    pub result: Value,
+    artifacts: BTreeMap<String, Value>,
+}
+
+impl InvocationResult {
+    pub fn artifact(&self, id: &Value) -> Result<Value, RunError> {
+        id.as_str()
+            .and_then(|id| self.artifacts.get(id))
+            .cloned()
+            .ok_or_else(|| invalid("artifact reference missing from producing response"))
+    }
+}
+
 pub(super) struct Session<'a> {
     pub plan: &'a BenchmarkPlan,
     pub job: &'a PlannedJob,
@@ -19,7 +33,7 @@ pub(super) struct Session<'a> {
     pub engine: &'a ManifestEngine,
     pub capabilities: Value,
     pub benchmark: Value,
-    pub artifacts: BTreeMap<String, Value>,
+    pub canonical_input: Value,
     run: &'a mut RunDirectory,
     workspace: RunWorkspace,
     invocation: AdapterInvocation,
@@ -94,7 +108,7 @@ impl<'a> Session<'a> {
             capabilities: Value::Null,
             benchmark: Value::Null,
             sources: BTreeMap::new(),
-            artifacts: BTreeMap::new(),
+            canonical_input: Value::Null,
             sequence: 0,
             adapter_id: adapter["adapter_id"].as_str().unwrap().into(),
             invocation: AdapterInvocation {
@@ -109,7 +123,7 @@ impl<'a> Session<'a> {
                 graceful_cancellation: false,
             },
         };
-        let canonical =
+        session.canonical_input =
             session.fixture("canonical-input", "canonical_input", input.fixture().path())?;
         let expected = session.fixture(
             "expected-output",
@@ -127,9 +141,6 @@ impl<'a> Session<'a> {
             "expected_output_digest": expected["digest"],
             "commitment_policy": {"input": input.commit_input() != crate::Commitment::None,
                 "output": input.commit_output() != crate::Commitment::None}});
-        session
-            .artifacts
-            .insert("canonical-input".into(), canonical);
         Ok(session)
     }
 
@@ -161,7 +172,7 @@ impl<'a> Session<'a> {
         operation: &str,
         params: Value,
         phase: &str,
-    ) -> Result<Value, RunError> {
+    ) -> Result<InvocationResult, RunError> {
         let digest = crate::digest::hash_bytes(
             format!("{}:{}", self.workspace.attempt_id(), self.sequence).as_bytes(),
         );
@@ -202,23 +213,31 @@ impl<'a> Session<'a> {
             )));
         }
         let response = result.response.unwrap();
-        for (entry, snapshot) in response["artifacts"]
+        let mut artifacts = BTreeMap::new();
+        for (index, (entry, snapshot)) in response["artifacts"]
             .as_array()
             .unwrap()
             .iter()
             .zip(result.artifacts)
+            .enumerate()
         {
-            let id = entry["id"].as_str().unwrap();
+            let response_id = entry["id"].as_str().unwrap();
+            // Wire IDs are response-local; downstream requests use producer-scoped IDs.
+            let input_id = format!("{id}-{index}");
             let snapshot = serde_json::to_value(snapshot)?;
             self.sources.insert(
-                id.into(),
+                input_id.clone(),
                 self.run.path().join(snapshot["uri"].as_str().unwrap()),
             );
             let mut entry = entry.clone();
-            entry["path"] = format!("inputs/{id}").into();
-            self.artifacts.insert(id.into(), entry);
+            entry["path"] = format!("inputs/{input_id}").into();
+            entry["id"] = input_id.into();
+            artifacts.insert(response_id.into(), entry);
         }
-        Ok(response["result"].clone())
+        Ok(InvocationResult {
+            result: response["result"].clone(),
+            artifacts,
+        })
     }
 
     fn stage_inputs(&self, id: &str, params: &Value) -> Result<(), RunError> {
@@ -243,6 +262,7 @@ impl<'a> Session<'a> {
 
     pub fn negotiate(&mut self) -> Result<(), RunError> {
         let capabilities = self.invoke("capabilities", json!({"host":{"name":"zkperf","version":env!("CARGO_PKG_VERSION"),"supported_protocol_versions":["1.0.0"]}}), "capabilities")?;
+        let capabilities = capabilities.result;
         super::capabilities::validate(&capabilities, &self.adapter_id)?;
         let limits = &capabilities["limits"];
         let limit = |name: &str| {
@@ -278,7 +298,7 @@ impl<'a> Session<'a> {
             json!({"configuration":self.engine.configuration(),"artifacts":[]}),
             "metadata",
         )?;
-        if metadata["adapter"] != capabilities["adapter"] {
+        if metadata.result["adapter"] != capabilities["adapter"] {
             return Err(invalid(
                 "metadata adapter identity differs from capabilities",
             ));
