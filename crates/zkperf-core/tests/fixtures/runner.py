@@ -1,0 +1,177 @@
+"""Subprocess failure fixtures; this is not a benchmark adapter."""
+
+import json
+import hashlib
+import os
+from pathlib import Path
+import signal
+import subprocess
+import sys
+import time
+
+mode = sys.argv[1]
+if mode == "descendant":
+    Path(sys.argv[2]).write_text(str(os.getpid()))
+    time.sleep(2)
+    Path(sys.argv[3]).write_text("survived")
+    time.sleep(30)
+    sys.exit(0)
+if mode == "blocked-input":
+    time.sleep(30)
+    sys.exit(0)
+
+request = json.load(sys.stdin)
+sys.stderr.buffer.write(b"adapter diagnostic\n")
+sys.stderr.flush()
+if mode in {"tree", "orphan-pipes", "orphan-silent", "graceful", "cancel-cli"}:
+    handles = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL} if mode == "orphan-silent" else {}
+    child = subprocess.Popen([sys.executable, __file__, "descendant",
+                              os.environ["PID_FILE"], os.environ["SURVIVOR_FILE"]], **handles)
+    while not Path(os.environ["PID_FILE"]).exists():
+        time.sleep(.002)
+    if mode in {"orphan-pipes", "orphan-silent"}:
+        sys.exit(0)
+    if mode == "graceful":
+        while not Path("control/cancel.json").exists():
+            time.sleep(.002)
+        child.terminate()
+        child.wait()
+        time.sleep(.15)
+    else:
+        time.sleep(30)
+if mode == "exit":
+    sys.exit(7)
+if mode == "signal":
+    os.kill(os.getpid(), signal.SIGTERM)
+if mode == "flood":
+    sys.stderr.buffer.write(b"L" * (2 * 1024 * 1024))
+if mode == "overflow":
+    sys.stdout.buffer.write(b"X" * (2 * 1024 * 1024))
+    sys.stdout.flush()
+    time.sleep(30)
+if mode == "malformed":
+    print("SDK progress is not protocol JSON")
+    sys.exit(0)
+if mode == "invalid-utf8":
+    sys.stdout.buffer.write(b"\xff")
+    sys.exit(0)
+if mode == "environment":
+    assert "HOME" not in os.environ
+    assert os.environ["EXPLICIT_VALUE"] == "literal $VALUE"
+    assert Path.cwd().name == request["request_id"]
+    assert sys.argv[2] == "$(echo unexpanded)"
+
+catalog = json.loads(Path(sys.argv[-1]).read_text())
+response = next(item["response"] for item in catalog["exchanges"]
+                if item["request"]["operation"] == request["operation"])
+response.update({key: request[key] for key in
+                 ("protocol", "protocol_version", "request_id", "operation")})
+if mode in {"lifecycle", "bad-artifact", "oversized-artifact", "prepared-inputs",
+            "colliding-artifacts", "bad-initial-format", "bad-transformed-format",
+            "reject-setup"} or mode.startswith("large-limit-"):
+    params = request["params"]
+    inputs = []
+    for key in ("input_artifacts", "prepared_artifacts", "artifacts", "canonical_input", "proof"):
+        entries = params.get(key, [])
+        if isinstance(entries, dict):
+            entries = [entries]
+        inputs.extend(entries)
+        for entry in entries:
+            data = Path(entry["path"]).read_bytes()
+            assert len(data) == entry["byte_length"]
+            assert hashlib.sha256(data).hexdigest() == entry["digest"]["value"]
+    assert len({entry["id"] for entry in inputs}) == len(inputs)
+    assert len({entry["path"] for entry in inputs}) == len(inputs)
+    operation = request["operation"]
+    result = response["result"]
+    if operation == "capabilities":
+        result["proof_modes"][0]["id"] = "default"
+        if mode.startswith("large-limit-"):
+            result["limits"][mode.removeprefix("large-limit-")] = 18446744073709551616
+    if operation == "prepare":
+        assert mode != "reject-setup" or params["stage"] != "setup"
+        result["stage"] = params["stage"]
+        result["prepared_artifact_ids"] = ["prepared-" + params["stage"]]
+        response["artifacts"][0]["id"] = result["prepared_artifact_ids"][0]
+        response["artifacts"][0]["kind"] = {
+            "environment": "parameters", "build": "guest_program", "setup": "proving_key",
+        }[params["stage"]]
+    if operation == "prove":
+        if mode in {"prepared-inputs", "colliding-artifacts"}:
+            for kind, data in (("parameters", b"prepared-environment"),
+                               ("guest_program", b"prepared-build"),
+                               ("proving_key", b"prepared-setup")):
+                entry = next(entry for entry in inputs if entry["kind"] == kind)
+                assert Path(entry["path"]).read_bytes() == data
+            required = "execution_trace" if params["stage"] == "initial" else "proof"
+            assert any(entry["kind"] == required for entry in inputs)
+        result["stage"] = params["stage"]
+        result["proof_mode_id"] = params["proof_mode_id"]
+        if params["stage"] == "transform":
+            result["transformation_id"] = params["transformation_id"]
+            result.pop("public_values_artifact_id", None)
+            response["artifacts"] = response["artifacts"][:1]
+            response["artifacts"][0]["media_type"] = "application/vnd.zkperf.mock-proof+compressed"
+        if ((mode == "bad-initial-format" and params["stage"] == "initial")
+                or (mode == "bad-transformed-format" and params["stage"] == "transform")):
+            response["artifacts"][0]["media_type"] = "text/plain"
+    if operation == "verify":
+        result["output_digest"] = params["expected_output_digest"]
+        result["commitment_digests"] = params["expected_commitment_digests"]
+    for artifact in response["artifacts"]:
+        if artifact["kind"] == "canonical_output":
+            data = (Path(__file__).parent / "manifest/output.bin").read_bytes()
+        else:
+            data = artifact["id"].encode()
+        if mode == "colliding-artifacts" and artifact["kind"] not in {"canonical_output", "public_values"}:
+            original_id = artifact["id"]
+            artifact["id"] = "canonical-input"
+            for key, value in list(result.items()):
+                if key.endswith("_artifact_id") and value == original_id:
+                    result[key] = artifact["id"]
+                elif key.endswith("_artifact_ids"):
+                    result[key] = [artifact["id"] if item == original_id else item for item in value]
+        artifact["path"] = "outputs/" + artifact["id"]
+        artifact["byte_length"] = len(data)
+        artifact["digest"]["value"] = hashlib.sha256(data).hexdigest()
+        Path(artifact["path"]).write_bytes(data)
+        if mode == "bad-artifact":
+            Path(artifact["path"]).write_bytes(b"X" * len(data))
+        if mode == "oversized-artifact":
+            Path(artifact["path"]).write_bytes(data * 1000)
+    if operation == "execute":
+        assert params["canonical_input"]["kind"] == "canonical_input"
+        assert Path(params["canonical_input"]["path"]).read_bytes() == (
+            Path(__file__).parent / "manifest/input.bin").read_bytes()
+        if mode == "colliding-artifacts":
+            assert {Path(entry["path"]).read_bytes() for entry in params["prepared_artifacts"]} == {
+                b"prepared-environment", b"prepared-build", b"prepared-setup",
+            }
+        result["commitment_digests"] = {
+            "input": params["canonical_input"]["digest"],
+            "output": params["benchmark"]["expected_output_digest"],
+        }
+if mode == "mismatch":
+    response["request_id"] = "10000000-0000-4000-8000-000000000099"
+if mode in {"error", "unsupported", "graceful"}:
+    response.pop("result", None)
+    response["status"] = "unsupported" if mode == "unsupported" else "error"
+    response["error"] = {"phase": "capabilities", "code": "cancelled",
+                         "message": "fixture failure", "retryable": False}
+if mode.startswith("artifact-diagnostic-"):
+    status, problem = mode.removeprefix("artifact-diagnostic-").split("-")
+    response["status"] = status
+    if status != "success":
+        response.pop("result", None)
+        response["error"] = {"phase": "capabilities", "code": "fixture_failure",
+                             "message": "fixture failure", "retryable": False}
+    response["artifacts"] = [{
+        "id": "diagnostic", "kind": "other", "path": "outputs/diagnostic",
+        "media_type": "application/octet-stream", "byte_length": 4,
+        "digest": {"algorithm": "sha256", "value": hashlib.sha256(b"lost").hexdigest()},
+    }]
+    if problem == "digest":
+        Path("outputs/diagnostic").write_bytes(b"kept")
+print(json.dumps(response))
+if mode == "trailing":
+    print("{}")

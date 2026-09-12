@@ -12,15 +12,29 @@ and delegate manifest validation and invariant checks to `zkperf-core`.
   its effective configuration. Print deterministic, redacted JSON when requested.
 - `zkperf run [--manifest FILE] [--dry-run | --print-config]`: resolve benchmark
   configuration. `--dry-run` prints the deterministic schedule; `--print-config`
-  prints only the effective configuration. Execution belongs to issues #10–15.
+  prints only the effective configuration. Otherwise execute planned jobs and
+  retain subprocess evidence in an immutable run directory.
 - `zkperf report INPUT [--format FORMAT] [--output FILE]`: render a stored report.
   Rendering belongs to issues #16, #20 and #21.
 - `zkperf compare BASELINE CANDIDATE [--format FORMAT] [--output FILE]`:
   compare stored reports. Comparison and regression policy belong to issue #22.
 
-Until their respective services exist, executing `run`, `report`, and
-`compare` return an explicit unavailable diagnostic and exit 5. They never
-create files or report a successful benchmark. All commands provide `--help`.
+Until their respective services exist, `report` and `compare` return an explicit
+unavailable diagnostic and exit 5 without creating files. All commands provide
+`--help`.
+
+`run` executes jobs sequentially, including warm-ups, negotiates capabilities,
+and uses fresh subprocesses for preparation, execution, proving, transformations,
+and verification. It stops on the first failed or unsupported operation, prints
+the retained evidence path, and preserves cancellation as a separate outcome.
+Ctrl-C requests cancellation and process-tree cleanup. See the
+[runner contract](subprocess-runner-v1.md) for limits and evidence layout.
+
+This execution slice produces operation evidence rather than aggregate benchmark
+reports; `--format` is retained in the plan for future report production. Resource
+measurements and resource-limit enforcement are not implemented. Combined and
+end-to-end timing profiles are rejected explicitly rather than producing
+misleading component times.
 
 `validate` and `run` accept `--warmups N`, `--runs N`, `--output-dir DIRECTORY`,
 and `--format FORMAT[,FORMAT...]`. Formats are `terminal`, `json`, `html`, `csv`.
@@ -67,7 +81,7 @@ No override rewrites the source manifest.
 Manifest paths and report input/output paths are relative to the current working
 directory. Benchmark output directories (flags, environment, and manifest) are
 relative to the manifest directory and follow the same path restrictions as
-`outputs.directory`. Once execution exists, each run writes to its own
+`outputs.directory`. Each run writes to its own
 directory underneath it; see [run directories](run-directories-v1.md). Comma-separated environment formats replace the whole list.
 Unrelated environment variables are ignored. `init` does not read a manifest.
 `report` and `compare` do not load one either.
@@ -89,10 +103,11 @@ Stdout contains only command results or requested help/version output.
 | 3 | Configuration: invalid environment or manifest (including inaccessible manifest files/fixtures) |
 | 4 | I/O: initialization conflict, filesystem failure, or writing CLI output failed |
 | 5 | Requested service is not implemented |
+| 6 | Adapter, protocol, artifact, or execution failure; run evidence is retained |
+| 130 | Harness cancellation after supervised cleanup |
 
-Future execution and comparison services must add distinct statuses for runtime
-failure, incompatible reports and detected regressions before they are wired in.
-They must not reuse success or configuration failure for those outcomes.
+Future comparison services must add distinct statuses for incompatible reports
+and detected regressions before they are wired in.
 
 ## Verification scope
 

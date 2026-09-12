@@ -1,6 +1,7 @@
 //! Engine-independent benchmark orchestration primitives.
 
 mod digest;
+mod execution;
 mod init;
 mod manifest;
 mod measurement;
@@ -8,9 +9,11 @@ mod metadata;
 mod plan;
 mod report;
 mod run;
+mod runner;
 mod sample;
 mod types;
 
+pub use execution::{ExecutionResult, execute_plan};
 pub use init::initialize;
 pub use manifest::{
     BenchmarkManifest, FixtureHashError, ManifestEngine, ManifestError, ManifestInput,
@@ -44,6 +47,10 @@ pub use report::{
 };
 pub use run::{
     ArtifactRequest, RunDirectory, RunError, RunOutcome, RunRecord, RunState, RunWorkspace,
+};
+pub use runner::{
+    AdapterInvocation, CancellationToken, OperationOutcome, OperationRecord, OperationResult,
+    RunnerLimits, operation_path, run_operation,
 };
 pub use sample::{
     Correctness, DurationObservation, DurationOutcome, ExecutionCorrectness,
