@@ -24,6 +24,8 @@ issues; the command produces retained operation evidence and a run outcome.
   and cleanup durations, and protocol/process errors, including failed runs.
 - Validate response framing, schema, correlation and artifact integrity before
   accepting outputs. Preserve structured error and unsupported statuses.
+  Unreadable or corrupt diagnostic artifacts add errors without replacing an
+  adapter's error or unsupported status. Successful responses require valid artifacts.
 
 ## CLI integration
 
@@ -50,6 +52,20 @@ workspace at `logs/<attempt UUID>/<request UUID>/`: `request.json`, `stdout.bin`
 immutable artifact snapshots. Raw partial output stays diagnostic on failure.
 `phase_duration_ns` measures the subprocess boundary using the host monotonic
 clock; `cleanup_duration_ns` is separate. Polling resolution is two milliseconds.
+
+Artifact IDs belong to their response, not to the run. The host assigns each
+retained output an identity tied to its producing operation before combining
+inputs from different responses. Preparation outputs remain available to
+initial proving and proof transformations alongside the trace or prior proof.
+Proof media types must match the negotiated initial or transformation format
+before the next stage can consume them.
+
+Preparation follows phase dependencies: build needs environment preparation;
+setup also needs build; execution and later phases need the advertised setup
+stage. A build-only job stops after build, and a proving-only job stops after
+the initial proof. Verification consumes the mode's full transformation chain.
+Advertised limits outside the host's supported integer range fail negotiation
+with a retained error and a finalized failed run.
 
 Execution currently retains requested resource configuration without enforcing
 CPU/memory/network limits or collecting resource measurements. It does not
