@@ -72,12 +72,14 @@ Two ways in:
 - **Store**: the harness writes bytes to a run-relative path. The file is
   published atomically and hashed from the bytes written.
 - **Adopt**: an adapter already wrote a file inside its outputs root. The run
-  opens it once and hashes what that handle reads, so the digest describes the
-  bytes it saw rather than whatever the name resolves to later.
+  opens it once without following links, requests nonblocking I/O, and rejects
+  non-regular handles before hashing. A FIFO without a writer is rejected
+  instead of blocking adoption. The digest describes the bytes read through
+  that handle; callers must finish writing evidence before adopting it.
 
-`run.json`, `plan.json`, and `artifacts.jsonl` cannot be stored or adopted. The
-run keeps writing to them, so any digest taken from one would be wrong by the
-time the record naming it is published.
+`run.json`, `plan.json`, and `artifacts.jsonl` are reserved at the run root,
+including ASCII case variants such as `ARTIFACTS.JSONL`. This prevents adoption
+of mutable internal files through aliases on case-insensitive filesystems.
 
 Streamed evidence, such as captured adapter output, is created up front and
 adopted once complete. `plan.json` uses the manifest's diagnostic redaction, so
@@ -140,6 +142,10 @@ files as artifacts, a taken temporary name left alone, digests and byte lengths
 for stored and adopted artifacts, disjoint and non-reusable attempt workspaces,
 published outcomes and provenance, absence of leftover temporary files, and
 redaction of persisted configuration.
+
+Regression tests interleave a parent-directory swap between resolution and
+publication, verify retained root identity, reject reserved-name case aliases,
+and bound FIFO adoption in a subprocess so regressions cannot hang the suite.
 
 Execution, resource metrics, and report rendering are tracked in issues #11–16.
 The CLI writes no run directory until the supervised runner exists.
