@@ -1,11 +1,16 @@
 mod support;
 
 use std::fs;
+use std::path::Path;
 
 use support::{Fixture, assert_status, command};
 
 #[test]
 fn every_command_has_useful_help_without_loading_configuration() {
+    let executable = Path::new(env!("CARGO_BIN_EXE_zkperf"))
+        .file_name()
+        .expect("Cargo binary path should have a filename")
+        .to_string_lossy();
     for name in ["init", "validate", "run", "report", "compare"] {
         let output = command()
             .args([name, "--help"])
@@ -15,7 +20,10 @@ fn every_command_has_useful_help_without_loading_configuration() {
             .unwrap();
         assert_status(&output, 0);
         let text = String::from_utf8(output.stdout).unwrap();
-        assert!(text.contains(&format!("Usage: zkperf {name}")), "{text}");
+        assert!(
+            text.contains(&format!("Usage: {executable} {name}")),
+            "{text}"
+        );
         assert!(text.contains("Example:"), "{text}");
         assert!(text.contains("--log-level"), "{text}");
         assert!(output.stderr.is_empty());
