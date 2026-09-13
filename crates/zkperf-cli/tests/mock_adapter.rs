@@ -1,3 +1,5 @@
+#[path = "mock_adapter/environment.rs"]
+mod environment;
 #[path = "mock_adapter/runner.rs"]
 mod runner;
 mod support;
@@ -88,7 +90,7 @@ fn checked_in_fixture_runs_warmups_and_repetitions_without_an_sdk() {
     let record: Value = serde_json::from_slice(&fs::read(root.join("run.json")).unwrap()).unwrap();
     assert_eq!(record["state"], "completed");
     let records = operations(&root);
-    assert_eq!(records.len(), 27);
+    assert_eq!(records.len(), 30);
     assert!(
         records
             .iter()
@@ -149,8 +151,9 @@ fn mock_faults_retain_the_expected_cli_outcome_and_stop_at_the_selected_stage() 
         let record: Value =
             serde_json::from_slice(&fs::read(root.join("run.json")).unwrap()).unwrap();
         assert_eq!(record["state"], "failed");
+        environment::assert_capture(&root);
         let records = operations(&root);
-        assert_eq!(records.len(), 7, "{fault}: {records:?}");
+        assert_eq!(records.len(), 8, "{fault}: {records:?}");
         for (request, outcome) in records {
             assert_eq!(
                 outcome["outcome"],
@@ -182,6 +185,7 @@ fn graceful_and_forced_timeouts_keep_timeout_outcomes() {
             .output()
             .unwrap();
         assert_status(&output, 6);
+        environment::assert_capture(&run_path(&fixture));
         let (_, outcome) = operations(&run_path(&fixture))
             .into_iter()
             .find(|(request, _)| request["operation"] == "execute")

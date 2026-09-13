@@ -63,6 +63,11 @@ plan ID binds the complete effective configuration, including CLI and
 environment overrides. Guest binaries and engine outputs do not exist at
 creation time; they are hashed when the run stores or adopts them.
 
+The record also retains an [environment capture](environment-fingerprint-v1.md)
+and its SHA-256 digest from creation onward, including interrupted and failed
+runs. Execution writes immutable metadata snapshots under `metadata/<job-position>/`
+as adapter identities and prepared guest artifacts become available.
+
 Every artifact records its SHA-256 digest,
 byte length, media type, kind, run-relative URI, and originating attempt. Those
 records are exactly the `artifacts` entries of a
@@ -91,8 +96,9 @@ including case variants. `store`, `open_new`, and `adopt` reject those paths;
 only adoption's internal snapshot writer may publish there.
 
 Streamed evidence, such as captured adapter output, is created up front and
-adopted once complete. `plan.json` uses the manifest's diagnostic redaction, so
-configured secrets and environment values never reach persisted evidence.
+adopted once complete. `plan.json` uses the manifest's diagnostic redaction.
+The environment capture retains only allowlisted names whose values satisfy
+the documented safe grammar; other environment values are excluded.
 
 ## Paths
 

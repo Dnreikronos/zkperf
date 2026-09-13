@@ -510,6 +510,43 @@ fn secret_like_configuration_keys_are_rejected() {
 }
 
 #[test]
+fn credential_aliases_are_rejected_before_manifest_persistence() {
+    for key in [
+        "DOCKER_AUTH_CONFIG",
+        "dockerAuthConfig",
+        "docker-auth-config",
+        "SSH_AUTH_SOCK",
+        "sshAuthSock",
+        "ssh-auth-sock",
+    ] {
+        let source = VALID_MANIFEST.replace(
+            "backend = \"cpu\"",
+            &format!("settings = [{{ {key} = \"sensitive-value\" }}]"),
+        );
+        let temporary = TemporaryManifest::new(&source);
+        let error = BenchmarkManifest::load(temporary.path()).unwrap_err();
+        assert_eq!(
+            error.field_path(),
+            format!("engines[0].configuration.settings[0].{key}")
+        );
+        assert!(!error.to_string().contains("sensitive-value"));
+    }
+    for key in ["DOCKER_AUTH_CONFIG", "SSH_AUTH_SOCK"] {
+        let source = VALID_MANIFEST.replace(
+            "environment_variables = {}",
+            &format!("environment_variables = {{ {key} = \"sensitive-value\" }}"),
+        );
+        let temporary = TemporaryManifest::new(&source);
+        let error = BenchmarkManifest::load(temporary.path()).unwrap_err();
+        assert_eq!(
+            error.field_path(),
+            format!("run.resources.environment_variables.{key}")
+        );
+        assert!(!error.to_string().contains("sensitive-value"));
+    }
+}
+
+#[test]
 fn output_directory_must_be_a_directory_when_it_exists() {
     let directory_manifest = TemporaryManifest::new(VALID_MANIFEST);
     fs::create_dir(directory_manifest.root.join("results"))

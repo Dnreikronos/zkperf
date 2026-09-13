@@ -11,12 +11,13 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use zkperf_core::{
     AdapterInvocation, BenchmarkManifest, BenchmarkPlan, CancellationToken, OperationOutcome,
-    OperationResult, RunDirectory, RunnerLimits,
+    OperationResult, RunDirectory, RunWorkspace, RunnerLimits,
 };
 
 struct Fixture {
     root: PathBuf,
-    plan: BenchmarkPlan,
+    run: Option<RunDirectory>,
+    workspace: RunWorkspace,
 }
 
 impl Fixture {
@@ -35,7 +36,14 @@ impl Fixture {
         }
         let plan = BenchmarkPlan::build(BenchmarkManifest::load(root.join("zkperf.toml")).unwrap())
             .unwrap();
-        Self { root, plan }
+        // Host collection and executable hashing are setup, not subprocess time.
+        let run = RunDirectory::create(&plan).unwrap();
+        let workspace = run.attempt(&plan.jobs()[0], 0).unwrap();
+        Self {
+            root,
+            run: Some(run),
+            workspace,
+        }
     }
 
     fn invocation(&self, mode: &str) -> AdapterInvocation {
@@ -72,14 +80,14 @@ impl Fixture {
     }
 
     fn run(
-        &self,
+        &mut self,
         invocation: &AdapterInvocation,
         token: &CancellationToken,
     ) -> (OperationResult, PathBuf) {
-        let mut run = RunDirectory::create(&self.plan).unwrap();
-        let workspace = run.attempt(&self.plan.jobs()[0], 0).unwrap();
+        let mut run = self.run.take().expect("fixture runs one operation");
+        let workspace = &self.workspace;
         let path = run.path().to_path_buf();
-        let result = zkperf_core::run_operation(&mut run, &workspace, invocation, token).unwrap();
+        let result = zkperf_core::run_operation(&mut run, workspace, invocation, token).unwrap();
         let evidence = path
             .join("logs")
             .join(workspace.attempt_id().to_string())
@@ -94,13 +102,14 @@ impl Fixture {
 
 impl Drop for Fixture {
     fn drop(&mut self) {
+        drop(self.run.take());
         drop(fs::remove_dir_all(&self.root));
     }
 }
 
 #[test]
 fn success_uses_isolated_cwd_literal_arguments_and_explicit_environment() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
     let (result, evidence) = fixture.run(
         &fixture.invocation("environment"),
         &CancellationToken::default(),
@@ -130,7 +139,7 @@ fn process_protocol_and_structured_failures_are_distinct_and_persist_logs() {
         ("error", OperationOutcome::AdapterError),
         ("unsupported", OperationOutcome::Unsupported),
     ] {
-        let fixture = Fixture::new();
+        let mut fixture = Fixture::new();
         let (result, evidence) =
             fixture.run(&fixture.invocation(mode), &CancellationToken::default());
         assert_eq!(
@@ -147,7 +156,7 @@ fn process_protocol_and_structured_failures_are_distinct_and_persist_logs() {
 
 #[test]
 fn flooding_stderr_is_bounded_and_does_not_corrupt_protocol() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
     let mut invocation = fixture.invocation("flood");
     invocation.limits.stderr_bytes = 4096;
     let (result, evidence) = fixture.run(&invocation, &CancellationToken::default());
@@ -161,7 +170,7 @@ fn flooding_stderr_is_bounded_and_does_not_corrupt_protocol() {
 
 #[test]
 fn oversized_stdout_terminates_without_waiting_for_deadline() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
     let mut invocation = fixture.invocation("overflow");
     invocation.limits.stdout_bytes = 4096;
     let start = Instant::now();
@@ -178,7 +187,7 @@ fn oversized_stdout_terminates_without_waiting_for_deadline() {
 #[test]
 fn timeout_covers_blocked_stdin_and_inherited_pipes() {
     for mode in ["blocked-input", "tree", "orphan-pipes"] {
-        let fixture = Fixture::new();
+        let mut fixture = Fixture::new();
         let mut invocation = fixture.invocation(mode);
         invocation.request["timeout"]["limit_ns"] = 300_000_000_u64.into();
         if mode == "blocked-input" {
@@ -208,7 +217,7 @@ fn timeout_covers_blocked_stdin_and_inherited_pipes() {
 
 #[test]
 fn cancellation_is_distinct_and_grace_is_excluded_from_phase_timing() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
     let mut invocation = fixture.invocation("graceful");
     invocation.graceful_cancellation = true;
     let token = CancellationToken::default();
@@ -233,7 +242,7 @@ fn cancellation_is_distinct_and_grace_is_excluded_from_phase_timing() {
 #[cfg(unix)]
 #[test]
 fn signal_exit_is_recorded() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
     let (result, _) = fixture.run(&fixture.invocation("signal"), &CancellationToken::default());
     assert_eq!(result.record.outcome, OperationOutcome::ProcessFailed);
     assert_eq!(result.record.signal, Some(15));
@@ -242,7 +251,7 @@ fn signal_exit_is_recorded() {
 
 #[test]
 fn timeout_stays_timed_out_when_adapter_returns_during_grace() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
     let mut invocation = fixture.invocation("graceful");
     invocation.graceful_cancellation = true;
     invocation.request["timeout"]["limit_ns"] = 500_000_000_u64.into();
@@ -255,7 +264,7 @@ fn timeout_stays_timed_out_when_adapter_returns_during_grace() {
 
 #[test]
 fn cancelled_before_spawn_retains_a_zero_duration_outcome() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
     let token = CancellationToken::default();
     token.cancel();
     let mut invocation = fixture.invocation("tree");
@@ -269,20 +278,20 @@ fn cancelled_before_spawn_retains_a_zero_duration_outcome() {
 
 #[test]
 fn duplicate_invocations_cannot_overwrite_existing_evidence() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
     let invocation = fixture.invocation("environment");
-    let mut run = RunDirectory::create(&fixture.plan).unwrap();
-    let workspace = run.attempt(&fixture.plan.jobs()[0], 0).unwrap();
+    let mut run = fixture.run.take().unwrap();
+    let workspace = &fixture.workspace;
     let token = CancellationToken::default();
-    let first = zkperf_core::run_operation(&mut run, &workspace, &invocation, &token).unwrap();
+    let first = zkperf_core::run_operation(&mut run, workspace, &invocation, &token).unwrap();
     assert_eq!(first.record.outcome, OperationOutcome::Success);
-    assert!(zkperf_core::run_operation(&mut run, &workspace, &invocation, &token).is_err());
+    assert!(zkperf_core::run_operation(&mut run, workspace, &invocation, &token).is_err());
 }
 
 #[cfg(unix)]
 #[test]
 fn silent_descendants_are_terminated_after_the_leader_exits() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
     let start = Instant::now();
     let (result, _) = fixture.run(
         &fixture.invocation("orphan-silent"),

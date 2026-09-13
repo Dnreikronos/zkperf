@@ -130,12 +130,12 @@ fn build_engine(engine_id: Slug) -> EngineMetadata {
 
 fn build_environment() -> EnvironmentMetadata {
     let host = HostMetadata::new(HostMetadataParts {
-        machine_id: text("machine"),
-        architecture: Architecture::X86_64,
+        machine_id: text("machine").into(),
+        architecture: Architecture::X86_64.into(),
         cpu: CpuMetadata::new(text("cpu"), text("1"), nonzero(4), nonzero(8)),
-        ram_bytes: nonzero(1_024),
-        accelerators: vec![],
-        storage: text("ssd"),
+        ram_bytes: nonzero(1_024).into(),
+        accelerators: vec![].into(),
+        storage: text("ssd").into(),
         operating_system: OperatingSystemMetadata::new(text("os"), text("1.0"), text("kernel")),
         firmware_or_microcode: None,
     });
@@ -194,7 +194,7 @@ fn external_producer_builds_report_without_json_deserialization() {
 
     let json = serde_json::to_string(&report).unwrap();
     let round_tripped = BenchmarkReport::from_json(&json).unwrap();
-    assert_eq!(round_tripped.as_v1(), &report);
+    assert_eq!(round_tripped.as_v1(), Some(&report));
 }
 
 #[test]

@@ -17,10 +17,14 @@ serde.workspace = true
 serde_json.workspace = true
 serde_path_to_error.workspace = true
 sha2.workspace = true
+sysinfo.workspace = true
 toml.workspace = true
 uriparse.workspace = true
 uuid.workspace = true
 zkperf-adapter-protocol.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+rustix.workspace = true
 
 [lints]
 workspace = true
