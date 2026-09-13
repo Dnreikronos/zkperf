@@ -1,5 +1,7 @@
 #[path = "subprocess_runner/regressions.rs"]
 mod regressions;
+#[path = "subprocess_runner/resources.rs"]
+mod resources;
 
 use std::collections::BTreeMap;
 use std::fs;
