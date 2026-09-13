@@ -117,7 +117,16 @@ MUST include the non-secret endpoint identity, regions, transport, connection
 type, and observed network characteristics required by the fairness contract.
 
 `environment.clock` MUST describe the monotonic clock used by every duration
-sample. Its resolution is an integer number of nanoseconds.
+sample. A known resolution is an integer number of nanoseconds.
+
+Individual host fields, CPU fields, OS fields, and clock resolution may instead
+use `{ "availability": "unavailable", "reason": { "code": "...", "message":
+"..." } }`. The reason is required; null, zero counts, guessed hardware, and
+empty inventories must not stand in for unavailable observations. Existing
+known values retain their v1 JSON shape. A gap does not satisfy disclosure or
+prove comparability; consumers must evaluate it. See the
+[environment capture contract](environment-fingerprint-v1.md) for collection
+sources, safe environment settings, and platform limitations.
 
 ## 6. Measurements and canonical units
 

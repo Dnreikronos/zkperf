@@ -64,6 +64,14 @@ The runner's integration tests require Python 3.10+ (`python3` on Unix, `python`
 on Windows) for subprocess fixtures. Run the focused execution checks with
 `cargo test -p zkperf-core --test subprocess_runner -p zkperf-cli --test execution`.
 
+Environment capture uses `sysinfo` 0.33 with only its `system` feature, compatible
+with the workspace MSRV. It refreshes static CPU and RAM metadata without process
+or user enumeration. Platform gaps and safe settings are documented in the
+[environment capture contract](environment-fingerprint-v1.md). The dependency
+allowlist in `tools/check.py` includes this host-only dependency and the direct
+Unix `rustix` dependency used for OS-reported architecture without a build-target
+fallback. `rustix` was already present transitively through run storage.
+
 The [deterministic mock adapter](mock-adapter-v1.md) in `adapters/mock/` is a
 standalone Python standard-library implementation of all protocol operations.
 Generate its runnable benchmark with `python3 tools/create_mock_fixture.py DIR`.
