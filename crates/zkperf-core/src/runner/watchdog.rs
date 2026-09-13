@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use super::{AdapterInvocation, CancellationToken, OperationOutcome, OperationRecord};
 use process_wrap::std::StdChildWrapper;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -20,14 +23,7 @@ pub(super) struct Watchdog<'a> {
 impl Watchdog<'_> {
     pub fn wait(&mut self, child: &mut dyn StdChildWrapper, finished: impl Fn() -> bool) {
         loop {
-            // Pin the root PID until the worker anchors its identity. Deadlines
-            // and cancellation remain active even if that OS read is delayed.
-            let status = if self.resources.ready() {
-                child.inner_mut().try_wait()
-            } else {
-                Ok(None)
-            };
-            let exited = match status {
+            let exited = match exit_status(child, self.resources.ready()) {
                 Ok(status) => status,
                 Err(error) => {
                     self.resources.stop();
@@ -74,14 +70,10 @@ impl Watchdog<'_> {
                 }
             }
             if let Some(status) = exited {
-                self.record.exit_code = status.code();
-                #[cfg(unix)]
-                {
-                    use std::os::unix::process::ExitStatusExt;
-                    self.record.signal = status.signal();
-                }
+                self.record.exit_code = status.code;
+                self.record.signal = status.signal;
                 if finished() {
-                    if self.stopped.is_none() && !status.success() {
+                    if self.stopped.is_none() && status.code != Some(0) {
                         self.record.outcome = OperationOutcome::ProcessFailed;
                     }
                     break;
@@ -97,4 +89,43 @@ impl Watchdog<'_> {
             thread::sleep(Duration::from_millis(2));
         }
     }
+}
+
+struct ChildExit {
+    code: Option<i32>,
+    signal: Option<i32>,
+}
+
+fn exit_status(child: &mut dyn StdChildWrapper, ready: bool) -> std::io::Result<Option<ChildExit>> {
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if !ready {
+        use rustix::process::{Pid, WaitId, WaitIdOptions, waitid};
+
+        // Observe completion without reaping while the sampler anchors the PID.
+        return waitid(
+            WaitId::Pid(Pid::from_child(child.inner())),
+            WaitIdOptions::EXITED | WaitIdOptions::NOHANG | WaitIdOptions::NOWAIT,
+        )
+        .map(|status| {
+            status.map(|status| ChildExit {
+                code: status.exit_status(),
+                signal: status.terminating_signal(),
+            })
+        })
+        .map_err(Into::into);
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    let _ = ready;
+    child.inner_mut().try_wait().map(|status| {
+        status.map(|status| ChildExit {
+            code: status.code(),
+            #[cfg(unix)]
+            signal: {
+                use std::os::unix::process::ExitStatusExt;
+                status.signal()
+            },
+            #[cfg(not(unix))]
+            signal: None,
+        })
+    })
 }

@@ -70,6 +70,16 @@ impl Sampler {
         self.ready.load(Ordering::Acquire)
     }
 
+    #[cfg(test)]
+    pub(crate) fn pending_for_test() -> Self {
+        Self {
+            stop: None,
+            boundary: Arc::new(StopBoundary::default()),
+            worker: None,
+            ready: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
     pub fn stop(&mut self) -> Instant {
         let stopped = self.boundary.request();
         if let Some(send) = self.stop.take() {
