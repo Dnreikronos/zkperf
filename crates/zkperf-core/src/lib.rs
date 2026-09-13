@@ -6,6 +6,7 @@ mod init;
 mod manifest;
 mod measurement;
 mod metadata;
+mod observed;
 mod plan;
 mod report;
 mod run;
@@ -39,6 +40,7 @@ pub use metadata::{
     SetupCacheState, Sha256Digest, SuiteMetadata, SuiteMetadataParts, ToolMetadata, UnitInterval,
     UriReference, WorkloadMetadata,
 };
+pub use observed::{Observed, UnavailableMetadata};
 pub use plan::{BenchmarkPlan, FileProvenance, PlanError, PlannedJob};
 pub use report::{
     Artifact, ArtifactKind, ArtifactParts, BenchmarkJob, BenchmarkReport, BenchmarkReportV1,

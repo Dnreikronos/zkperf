@@ -9,7 +9,7 @@ use serde_json::{Map, Number, Value};
 use uriparse::{URI, URIReference};
 
 use crate::types::number_is_unit_interval;
-use crate::{ByteSize, Nanoseconds, NonEmptyString, Slug, Timestamp};
+use crate::{ByteSize, Nanoseconds, NonEmptyString, Observed, Slug, Timestamp};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
@@ -776,25 +776,25 @@ pub enum Architecture {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CpuMetadata {
-    model: NonEmptyString,
-    stepping: NonEmptyString,
-    physical_cores: NonZeroU64,
-    logical_cores: NonZeroU64,
+    model: Observed<NonEmptyString>,
+    stepping: Observed<NonEmptyString>,
+    physical_cores: Observed<NonZeroU64>,
+    logical_cores: Observed<NonZeroU64>,
 }
 
 impl CpuMetadata {
     #[must_use]
     pub fn new(
-        model: NonEmptyString,
-        stepping: NonEmptyString,
-        physical_cores: NonZeroU64,
-        logical_cores: NonZeroU64,
+        model: impl Into<Observed<NonEmptyString>>,
+        stepping: impl Into<Observed<NonEmptyString>>,
+        physical_cores: impl Into<Observed<NonZeroU64>>,
+        logical_cores: impl Into<Observed<NonZeroU64>>,
     ) -> Self {
         Self {
-            model,
-            stepping,
-            physical_cores,
-            logical_cores,
+            model: model.into(),
+            stepping: stepping.into(),
+            physical_cores: physical_cores.into(),
+            logical_cores: logical_cores.into(),
         }
     }
 }
@@ -802,18 +802,22 @@ impl CpuMetadata {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct OperatingSystemMetadata {
-    name: NonEmptyString,
-    version: NonEmptyString,
-    kernel: NonEmptyString,
+    name: Observed<NonEmptyString>,
+    version: Observed<NonEmptyString>,
+    kernel: Observed<NonEmptyString>,
 }
 
 impl OperatingSystemMetadata {
     #[must_use]
-    pub fn new(name: NonEmptyString, version: NonEmptyString, kernel: NonEmptyString) -> Self {
+    pub fn new(
+        name: impl Into<Observed<NonEmptyString>>,
+        version: impl Into<Observed<NonEmptyString>>,
+        kernel: impl Into<Observed<NonEmptyString>>,
+    ) -> Self {
         Self {
-            name,
-            version,
-            kernel,
+            name: name.into(),
+            version: version.into(),
+            kernel: kernel.into(),
         }
     }
 }
@@ -821,30 +825,30 @@ impl OperatingSystemMetadata {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct HostMetadata {
-    machine_id: NonEmptyString,
-    architecture: Architecture,
+    machine_id: Observed<NonEmptyString>,
+    architecture: Observed<Architecture>,
     cpu: CpuMetadata,
-    ram_bytes: NonZeroU64,
-    accelerators: Vec<NonEmptyString>,
-    storage: NonEmptyString,
+    ram_bytes: Observed<NonZeroU64>,
+    accelerators: Observed<Vec<NonEmptyString>>,
+    storage: Observed<NonEmptyString>,
     operating_system: OperatingSystemMetadata,
     #[serde(
         default,
         deserialize_with = "crate::deserialize_optional_non_null",
         skip_serializing_if = "Option::is_none"
     )]
-    firmware_or_microcode: Option<NonEmptyString>,
+    firmware_or_microcode: Option<Observed<NonEmptyString>>,
 }
 
 pub struct HostMetadataParts {
-    pub machine_id: NonEmptyString,
-    pub architecture: Architecture,
+    pub machine_id: Observed<NonEmptyString>,
+    pub architecture: Observed<Architecture>,
     pub cpu: CpuMetadata,
-    pub ram_bytes: NonZeroU64,
-    pub accelerators: Vec<NonEmptyString>,
-    pub storage: NonEmptyString,
+    pub ram_bytes: Observed<NonZeroU64>,
+    pub accelerators: Observed<Vec<NonEmptyString>>,
+    pub storage: Observed<NonEmptyString>,
     pub operating_system: OperatingSystemMetadata,
-    pub firmware_or_microcode: Option<NonEmptyString>,
+    pub firmware_or_microcode: Option<Observed<NonEmptyString>>,
 }
 
 impl HostMetadata {
@@ -1219,16 +1223,16 @@ impl<'de> Deserialize<'de> for Resources {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ClockMetadata {
     source: NonEmptyString,
-    resolution_ns: NonZeroU64,
+    resolution_ns: Observed<NonZeroU64>,
     monotonic: AlwaysTrue,
 }
 
 impl ClockMetadata {
     #[must_use]
-    pub const fn new(source: NonEmptyString, resolution_ns: NonZeroU64) -> Self {
+    pub fn new(source: NonEmptyString, resolution_ns: impl Into<Observed<NonZeroU64>>) -> Self {
         Self {
             source,
-            resolution_ns,
+            resolution_ns: resolution_ns.into(),
             monotonic: AlwaysTrue,
         }
     }
@@ -1243,7 +1247,7 @@ impl<'de> Deserialize<'de> for ClockMetadata {
         #[serde(deny_unknown_fields)]
         struct Raw {
             source: NonEmptyString,
-            resolution_ns: NonZeroU64,
+            resolution_ns: Observed<NonZeroU64>,
             monotonic: AlwaysTrue,
         }
 

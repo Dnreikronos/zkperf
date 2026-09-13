@@ -818,18 +818,46 @@
       ],
       "properties": {
         "model": {
-          "$ref": "#/$defs/nonEmptyString"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         },
         "stepping": {
-          "$ref": "#/$defs/nonEmptyString"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         },
         "physical_cores": {
-          "type": "integer",
-          "minimum": 1
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         },
         "logical_cores": {
-          "type": "integer",
-          "minimum": 1
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -843,13 +871,34 @@
       ],
       "properties": {
         "name": {
-          "$ref": "#/$defs/nonEmptyString"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         },
         "version": {
-          "$ref": "#/$defs/nonEmptyString"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         },
         "kernel": {
-          "$ref": "#/$defs/nonEmptyString"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -867,38 +916,80 @@
       ],
       "properties": {
         "machine_id": {
-          "$ref": "#/$defs/nonEmptyString"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         },
         "architecture": {
-          "enum": [
-            "x86_64",
-            "aarch64",
-            "riscv64",
-            "wasm32",
-            "other"
+          "oneOf": [
+            {
+              "enum": [
+                "x86_64",
+                "aarch64",
+                "riscv64",
+                "wasm32",
+                "other"
+              ]
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
           ]
         },
         "cpu": {
           "$ref": "#/$defs/cpu"
         },
         "ram_bytes": {
-          "type": "integer",
-          "minimum": 1
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         },
         "accelerators": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/nonEmptyString"
-          }
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/nonEmptyString"
+              }
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         },
         "storage": {
-          "$ref": "#/$defs/nonEmptyString"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         },
         "operating_system": {
           "$ref": "#/$defs/operatingSystem"
         },
         "firmware_or_microcode": {
-          "$ref": "#/$defs/nonEmptyString"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -1089,8 +1180,15 @@
           "$ref": "#/$defs/nonEmptyString"
         },
         "resolution_ns": {
-          "type": "integer",
-          "minimum": 1
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "$ref": "#/$defs/unavailableMetadata"
+            }
+          ]
         },
         "monotonic": {
           "const": true
@@ -2385,6 +2483,22 @@
           "additionalProperties": false
         }
       ]
+    },
+    "unavailableMetadata": {
+      "type": "object",
+      "required": [
+        "availability",
+        "reason"
+      ],
+      "properties": {
+        "availability": {
+          "const": "unavailable"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }
