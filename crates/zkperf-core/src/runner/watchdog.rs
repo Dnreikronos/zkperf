@@ -14,14 +14,23 @@ pub(super) struct Watchdog<'a> {
     pub stopped: Option<Instant>,
     pub limit: Duration,
     pub grace: Duration,
+    pub resources: &'a mut crate::resources::Sampler,
 }
 
 impl Watchdog<'_> {
     pub fn wait(&mut self, child: &mut dyn StdChildWrapper, finished: impl Fn() -> bool) {
         loop {
-            let exited = match child.inner_mut().try_wait() {
+            // Pin the root PID until the worker anchors its identity. Deadlines
+            // and cancellation remain active even if that OS read is delayed.
+            let status = if self.resources.ready() {
+                child.inner_mut().try_wait()
+            } else {
+                Ok(None)
+            };
+            let exited = match status {
                 Ok(status) => status,
                 Err(error) => {
+                    self.resources.stop();
                     self.record.errors.push(format!("wait: {error}"));
                     self.record.outcome = OperationOutcome::ProcessFailed;
                     break;
@@ -45,13 +54,14 @@ impl Watchdog<'_> {
                     None
                 };
                 if let Some(reason) = reason {
+                    let stopped = self.resources.stop();
                     self.record.phase_duration_ns =
                         super::process::nanos(if reason == "deadline_exceeded" {
                             self.limit
                         } else {
-                            elapsed
+                            stopped.duration_since(self.start)
                         });
-                    self.stopped = Some(Instant::now());
+                    self.stopped = Some(stopped);
                     if reason != "protocol_error" {
                         if let Err(error) =
                             super::evidence::cancel(self.control, &self.invocation.request, reason)

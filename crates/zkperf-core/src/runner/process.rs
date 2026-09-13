@@ -117,8 +117,7 @@ pub(super) fn execute(
             stdout: Vec::new(),
         };
     }
-    let mut input = serde_json::to_vec(request).expect("JSON value serialization");
-    input.push(b'\n');
+    let input = format!("{request}\n").into_bytes();
     let limit = Duration::from_nanos(request["timeout"]["limit_ns"].as_u64().unwrap());
     let grace = if invocation.graceful_cancellation {
         Duration::from_nanos(request["timeout"]["termination_grace_ns"].as_u64().unwrap())
@@ -139,6 +138,7 @@ pub(super) fn execute(
             };
         }
     };
+    let mut resources = crate::resources::Sampler::start(child.child.inner().id(), start, limit);
     let mut stdin = child.child.stdin().take().unwrap();
     let out = child.child.stdout().take().unwrap();
     let err = child.child.stderr().take().unwrap();
@@ -166,6 +166,7 @@ pub(super) fn execute(
             stopped: None,
             limit,
             grace,
+            resources: &mut resources,
         };
         watchdog.wait(child.child.as_mut(), || {
             reader.is_finished() && logger.is_finished() && writer.is_finished()
@@ -181,13 +182,30 @@ pub(super) fn execute(
             writer.join().unwrap(),
         );
         if stopped.is_none() {
-            complete_phase(&mut record, invocation, root, &output.0.bytes, start);
+            complete_phase(
+                &mut record,
+                invocation,
+                root,
+                &output.0.bytes,
+                start,
+                &mut resources,
+            );
             cleanup = Instant::now();
             child.stop(&mut record);
         }
+        record.resources = resources.finish();
         record.cleanup_duration_ns = nanos(cleanup.elapsed());
         output
     });
+    finish_capture(record, out, err, input_result)
+}
+
+fn finish_capture(
+    mut record: OperationRecord,
+    out: Capture,
+    err: Capture,
+    input_result: io::Result<()>,
+) -> RawOutput {
     record.stdout_truncated = out.truncated;
     record.stderr_truncated = err.truncated;
     for error in out.error.into_iter().chain(err.error) {
@@ -236,6 +254,7 @@ fn initial_record(request: &serde_json::Value) -> OperationRecord {
         signal: None,
         phase_duration_ns: 0,
         cleanup_duration_ns: 0,
+        resources: crate::ResourceEvidence::unavailable("not_spawned", "Adapter was not spawned."),
         stdout_truncated: false,
         stderr_truncated: false,
         errors: Vec::new(),
@@ -248,6 +267,7 @@ fn complete_phase(
     root: &Path,
     bytes: &[u8],
     start: Instant,
+    resources: &mut crate::resources::Sampler,
 ) {
     if record.outcome == OperationOutcome::Success {
         if let Err(error) = super::evidence::readable(root, bytes, invocation.limits) {
@@ -256,7 +276,7 @@ fn complete_phase(
         }
     }
     let limit = invocation.request["timeout"]["limit_ns"].as_u64().unwrap();
-    record.phase_duration_ns = nanos(start.elapsed());
+    record.phase_duration_ns = nanos(resources.stop().duration_since(start));
     if record.phase_duration_ns >= limit {
         record.phase_duration_ns = limit;
         record.outcome = OperationOutcome::TimedOut;
