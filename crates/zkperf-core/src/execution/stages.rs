@@ -72,7 +72,9 @@ pub(super) fn execute(session: &mut Session<'_>) -> Result<(), RunError> {
                 prepared.push(result.artifact(id)?);
             }
         }
+        session.capture_prepared(name, &prepared)?;
     }
+    session.capture_metadata("prepared", &prepared)?;
     if !needs_execution {
         return Ok(());
     }

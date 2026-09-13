@@ -1,6 +1,7 @@
 //! Sequential execution of the jobs in a validated plan.
 
 mod capabilities;
+mod metadata;
 mod session;
 mod stages;
 
@@ -29,6 +30,7 @@ pub fn execute_plan(
 ) -> Result<ExecutionResult, RunError> {
     let mut run = RunDirectory::create(plan)?;
     let directory = run.path().to_path_buf();
+    metadata::initial(&mut run, plan)?;
     let mut error = (plan
         .manifest()
         .run()

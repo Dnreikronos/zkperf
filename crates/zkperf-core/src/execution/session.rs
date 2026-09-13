@@ -41,6 +41,7 @@ pub(super) struct Session<'a> {
     sources: BTreeMap<String, std::path::PathBuf>,
     sequence: u64,
     adapter_id: String,
+    metadata: Value,
 }
 
 impl<'a> Session<'a> {
@@ -111,6 +112,7 @@ impl<'a> Session<'a> {
             canonical_input: Value::Null,
             sequence: 0,
             adapter_id: adapter["adapter_id"].as_str().unwrap().into(),
+            metadata: Value::Null,
             invocation: AdapterInvocation {
                 executable,
                 arguments: command[1..]
@@ -293,17 +295,34 @@ impl<'a> Session<'a> {
             .total_artifact_bytes
             .min(limit("max_total_artifact_bytes")?);
         self.invocation.graceful_cancellation = capabilities["cancellation"]["graceful"] == true;
+        self.capabilities = capabilities;
+        self.capture_prepared("capabilities", &[])?;
+        self.capture_metadata("negotiated", &[])
+    }
+
+    pub fn capture_metadata(&mut self, stage: &str, prepared: &[Value]) -> Result<(), RunError> {
         let metadata = self.invoke(
             "metadata",
-            json!({"configuration":self.engine.configuration(),"artifacts":[]}),
+            json!({"configuration":self.engine.configuration(),"artifacts":prepared}),
             "metadata",
         )?;
-        if metadata.result["adapter"] != capabilities["adapter"] {
+        if metadata.result["adapter"] != self.capabilities["adapter"] {
             return Err(invalid(
                 "metadata adapter identity differs from capabilities",
             ));
         }
-        self.capabilities = capabilities;
-        Ok(())
+        self.metadata = metadata.result;
+        self.capture_prepared(stage, prepared)
+    }
+
+    pub fn capture_prepared(&mut self, stage: &str, prepared: &[Value]) -> Result<(), RunError> {
+        super::metadata::save(
+            self.run,
+            self.job,
+            stage,
+            &self.metadata,
+            &self.capabilities,
+            prepared,
+        )
     }
 }

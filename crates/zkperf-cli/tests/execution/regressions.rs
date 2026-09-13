@@ -161,6 +161,7 @@ fn selected_phases_run_only_their_prerequisites() {
         assert_status(&run(&fixture), 0);
         assert_state(&fixture, "completed");
         let mut expected = lifecycle[..operation_count].to_vec();
+        expected.push("metadata");
         expected.sort_unstable();
         assert_eq!(operations(&fixture), expected, "phase {phase}");
     }

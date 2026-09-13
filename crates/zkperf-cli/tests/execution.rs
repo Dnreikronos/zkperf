@@ -109,6 +109,7 @@ fn run_completes_real_adapter_lifecycles_with_immutable_artifact_handoffs() {
                 "capabilities",
                 "execute",
                 "metadata",
+                "metadata",
                 "prepare",
                 "prepare",
                 "prepare",
