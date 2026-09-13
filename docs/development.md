@@ -72,6 +72,14 @@ allowlist in `tools/check.py` includes this host-only dependency and the direct
 Unix `rustix` dependency used for OS-reported architecture without a build-target
 fallback. `rustix` was already present transitively through run storage.
 
+Operation resource capture uses the same dependency's cumulative CPU counters,
+RSS and platform I/O APIs in a separate worker. Linux I/O uses per-thread proc
+counters to avoid double-counting waited-for descendants. See the
+[resource evidence contract](process-resources-v1.md) for sampling limits,
+platform semantics and the collector budget. Focused tests are
+`cargo test -p zkperf-core --lib resources` and
+`cargo test -p zkperf-core --test subprocess_runner resources`.
+
 The [deterministic mock adapter](mock-adapter-v1.md) in `adapters/mock/` is a
 standalone Python standard-library implementation of all protocol operations.
 Generate its runnable benchmark with `python3 tools/create_mock_fixture.py DIR`.

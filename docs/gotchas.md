@@ -24,3 +24,9 @@
 - Start subprocess deadline assertions after fixture setup. Run creation collects
   host metadata and hashes the executable; including that work makes supervisor
   tests depend on CI machine speed and debug-binary size.
+- Linux process I/O includes waited-for children. Summing `/proc/PID/io` with
+  retained descendant counters double-counts work after reap. Sample per-thread
+  I/O and test a writing grandchild whose parent and grandparent both wait.
+- Counter units are not precision guarantees. Preserve sampled peak semantics,
+  partial tree coverage, identity resolution and unavailable-read reasons with
+  the values, including failed operations.

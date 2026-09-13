@@ -2,8 +2,9 @@
 
 Issue #11 implements one subprocess transaction in the core and connects it
 to `zkperf run`. The existing protocol, plan, and immutable run directory are
-the sources of truth. Reporting and resource measurements remain subsequent
-issues; the command produces retained operation evidence and a run outcome.
+the sources of truth. Reporting remains a subsequent issue; the command produces
+retained operation evidence and a run outcome. Issue #14 adds sampled
+[process resource evidence](process-resources-v1.md) to operation outcomes.
 
 ## Transaction
 
@@ -68,7 +69,8 @@ Advertised limits outside the host's supported integer range fail negotiation
 with a retained error and a finalized failed run.
 
 Execution currently retains requested resource configuration without enforcing
-CPU/memory/network limits or collecting resource measurements. It does not
+CPU/memory/network limits. Operation outcomes include sampled resource values
+with capabilities and limitations, even on failure. It does not
 produce statistical summaries or claim a completed BenchmarkReport.
 
 ## Verification
