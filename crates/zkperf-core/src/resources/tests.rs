@@ -36,8 +36,15 @@ fn tree_totals_retain_exited_children_without_summing_individual_rss_peaks() {
     assert_eq!(result.io_read_bytes.value(), Some(&180));
     assert_eq!(result.io_written_bytes.value(), Some(&270));
     assert_eq!(result.sampled_peak_rss_bytes.value(), Some(&600));
-    assert_eq!(result.collection.observed_processes, 3);
-    assert_eq!(result.collection.missing_process_observations, 2);
+    assert_eq!(result.collection.value().unwrap().observed_processes, 3);
+    assert_eq!(
+        result
+            .collection
+            .value()
+            .unwrap()
+            .missing_process_observations,
+        2
+    );
 }
 
 #[test]
@@ -58,7 +65,7 @@ fn reparented_known_children_remain_tracked_but_reused_pids_do_not_inherit_membe
     );
     let result = aggregate.finish(INTERVAL * 2);
     assert_eq!(result.cpu_time_ns.value(), Some(&100));
-    assert_eq!(result.collection.observed_processes, 3);
+    assert_eq!(result.collection.value().unwrap().observed_processes, 3);
 }
 
 #[test]
@@ -82,7 +89,7 @@ fn a_new_child_with_a_reused_pid_gets_separate_lifetime_counters() {
     aggregate.sample(&[root, process(2, 1, 11, 30, 300)], INTERVAL * 2);
     let result = aggregate.finish(INTERVAL * 2);
     assert_eq!(result.cpu_time_ns.value(), Some(&60));
-    assert_eq!(result.collection.observed_processes, 3);
+    assert_eq!(result.collection.value().unwrap().observed_processes, 3);
 }
 
 #[test]
@@ -96,7 +103,7 @@ fn missed_root_and_changed_identities_cannot_seed_an_unrelated_tree() {
         aggregate.sample(&first, INTERVAL);
         aggregate.sample(&[process(1, 0, 11, 999, 999)], INTERVAL * 2);
         let result = aggregate.finish(INTERVAL * 2);
-        assert_eq!(result.collection.observed_processes, 0);
+        assert_eq!(result.collection.value().unwrap().observed_processes, 0);
         assert!(result.cpu_time_ns.value().is_none());
     }
 }
@@ -108,7 +115,7 @@ fn counter_regressions_do_not_wrap_or_subtract_prior_usage() {
     aggregate.sample(&[process(1, 0, 10, 1, 0)], INTERVAL * 2);
     let result = aggregate.finish(INTERVAL * 2);
     assert_eq!(result.cpu_time_ns.value(), Some(&100));
-    assert_eq!(result.collection.counter_regressions, 1);
+    assert_eq!(result.collection.value().unwrap().counter_regressions, 1);
 }
 
 #[test]
@@ -122,9 +129,12 @@ fn process_history_is_capped_and_arithmetic_saturation_is_disclosed() {
     }
     aggregate.sample(&processes, INTERVAL);
     let result = aggregate.finish(INTERVAL);
-    assert_eq!(result.collection.observed_processes, MAX_PROCESSES);
-    assert!(result.collection.process_limit_reached);
-    assert!(result.collection.counter_saturated);
+    assert_eq!(
+        result.collection.value().unwrap().observed_processes,
+        MAX_PROCESSES
+    );
+    assert!(result.collection.value().unwrap().process_limit_reached);
+    assert!(result.collection.value().unwrap().counter_saturated);
 }
 
 #[test]
@@ -151,7 +161,7 @@ fn unsupported_platforms_and_missing_metrics_have_reasons() {
         );
     }
     let evidence = ResourceEvidence::unavailable("not_spawned", "Adapter was not spawned.");
-    assert_eq!(evidence.collection.samples, 0);
+    assert_eq!(evidence.collection.value().unwrap().samples, 0);
     assert!(evidence.cpu_time_ns.value().is_none());
     assert!(evidence.extensions.is_empty());
 }
@@ -165,6 +175,28 @@ fn all_zero_counters_are_not_claimed_as_measured_zero() {
     assert!(result.sampled_peak_rss_bytes.value().is_none());
     assert!(result.io_read_bytes.value().is_none());
     assert!(result.io_written_bytes.value().is_none());
+}
+
+#[test]
+fn failed_collection_diagnostics_are_unavailable_instead_of_zero() {
+    let evidence = serde_json::to_value(ResourceEvidence::collector_failed()).unwrap();
+    for field in [
+        "collection",
+        "cpu_time_ns",
+        "sampled_peak_rss_bytes",
+        "io_read_bytes",
+        "io_written_bytes",
+    ] {
+        assert_eq!(evidence[field]["availability"], "unavailable");
+        assert_eq!(evidence[field]["reason"]["code"], "collector_failed");
+    }
+    let collection = evidence["collection"].as_object().unwrap();
+    assert_eq!(collection.len(), 2);
+
+    let unstarted = ResourceEvidence::unavailable("not_spawned", "Adapter was not spawned.");
+    let unstarted = serde_json::to_value(unstarted).unwrap();
+    assert_eq!(unstarted["collection"]["samples"], 0);
+    assert_eq!(unstarted["collection"]["counter_saturated"], false);
 }
 
 #[test]

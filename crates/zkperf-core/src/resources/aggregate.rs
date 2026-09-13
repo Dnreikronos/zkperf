@@ -58,7 +58,7 @@ impl Aggregate {
         for (id, retained) in &mut self.retained {
             if retained.active && current.get(&id.pid).is_none_or(|p| p.identity != *id) {
                 retained.active = false;
-                self.evidence.collection.missing_process_observations += 1;
+                self.evidence.collection_mut().missing_process_observations += 1;
             }
         }
         if !self.seeded {
@@ -100,7 +100,7 @@ impl Aggregate {
                 || counters.read < retained.counters.read
                 || counters.written < retained.counters.written
             {
-                self.evidence.collection.counter_regressions += 1;
+                self.evidence.collection_mut().counter_regressions += 1;
             }
             retained.counters.cpu_ns = retained.counters.cpu_ns.max(counters.cpu_ns);
             retained.counters.read = retained.counters.read.max(counters.read);
@@ -108,7 +108,7 @@ impl Aggregate {
             rss = sum(
                 rss,
                 counters.rss,
-                &mut self.evidence.collection.counter_saturated,
+                &mut self.evidence.collection_mut().counter_saturated,
             );
         }
         let old_peak = self
@@ -118,7 +118,7 @@ impl Aggregate {
             .copied()
             .unwrap_or(0);
         self.evidence.sampled_peak_rss_bytes = positive(old_peak.max(rss));
-        let stats = &mut self.evidence.collection;
+        let stats = self.evidence.collection_mut();
         let offset = nanos(offset);
         stats.max_sample_gap_ns = stats
             .max_sample_gap_ns
@@ -137,7 +137,7 @@ impl Aggregate {
             .collect();
         self.task_io
             .get_or_insert_default()
-            .sample(&processes, &mut self.evidence.collection);
+            .sample(&processes, self.evidence.collection_mut());
     }
 
     fn insert(&mut self, process: &Process) -> bool {
@@ -145,7 +145,7 @@ impl Aggregate {
             return false;
         }
         if self.retained.len() == MAX_PROCESSES {
-            self.evidence.collection.process_limit_reached = true;
+            self.evidence.collection_mut().process_limit_reached = true;
             return false;
         }
         self.retained.insert(
@@ -160,7 +160,7 @@ impl Aggregate {
 
     pub fn finish(mut self, elapsed: Duration) -> ResourceEvidence {
         let mut total = Counters::default();
-        let saturated = &mut self.evidence.collection.counter_saturated;
+        let saturated = &mut self.evidence.collection_mut().counter_saturated;
         for retained in self.retained.values() {
             total.cpu_ns = sum(total.cpu_ns, retained.counters.cpu_ns, saturated);
             total.read = sum(total.read, retained.counters.read, saturated);
@@ -172,11 +172,11 @@ impl Aggregate {
             self.evidence.io_written_bytes = positive(total.written);
         }
         if let Some(io) = &self.task_io {
-            let (read, written) = io.total(&mut self.evidence.collection);
+            let (read, written) = io.total(self.evidence.collection_mut());
             self.evidence.io_read_bytes = positive(read);
             self.evidence.io_written_bytes = positive(written);
         }
-        let stats = &mut self.evidence.collection;
+        let stats = self.evidence.collection_mut();
         stats.max_sample_gap_ns = stats
             .max_sample_gap_ns
             .max(nanos(elapsed).saturating_sub(stats.last_sample_offset_ns));

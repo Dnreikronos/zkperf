@@ -23,7 +23,10 @@ fn descendants_contribute_cpu_memory_and_io_even_after_exit() {
         result.record
     );
     let usage = &result.record.resources;
-    assert!(usage.collection.observed_processes >= 3, "{usage:?}");
+    assert!(
+        usage.collection.value().unwrap().observed_processes >= 3,
+        "{usage:?}"
+    );
     assert!(
         usage
             .cpu_time_ns
@@ -51,15 +54,17 @@ fn descendants_contribute_cpu_memory_and_io_even_after_exit() {
             *usage.io_written_bytes.value().unwrap() < 12 * 1024 * 1024,
             "{usage:?}"
         );
-        assert!(usage.collection.io_observed_tasks >= 4);
+        assert!(usage.collection.value().unwrap().io_observed_tasks >= 4);
     }
-    assert!(usage.collection.samples >= 2);
-    assert!(usage.collection.collection_duration_ns > 0);
+    assert!(usage.collection.value().unwrap().samples >= 2);
+    assert!(usage.collection.value().unwrap().collection_duration_ns > 0);
     assert!(
-        usage.collection.samples
+        usage.collection.value().unwrap().samples
             <= result.record.phase_duration_ns / usage.minimum_sample_interval_ns + 1
     );
-    assert!(usage.collection.last_sample_offset_ns <= result.record.phase_duration_ns);
+    assert!(
+        usage.collection.value().unwrap().last_sample_offset_ns <= result.record.phase_duration_ns
+    );
     assert!(!usage.limitations.is_empty());
 }
 
@@ -79,12 +84,25 @@ fn failures_and_timeouts_retain_resource_evidence() {
         let (result, _) = fixture.run(&invocation, &CancellationToken::default());
         assert_eq!(result.record.outcome, expected, "{:?}", result.record);
         assert!(
-            result.record.resources.collection.observed_processes >= 3,
+            result
+                .record
+                .resources
+                .collection
+                .value()
+                .unwrap()
+                .observed_processes
+                >= 3,
             "{:?}",
             result.record.resources
         );
         assert!(
-            result.record.resources.collection.last_sample_offset_ns
+            result
+                .record
+                .resources
+                .collection
+                .value()
+                .unwrap()
+                .last_sample_offset_ns
                 <= result.record.phase_duration_ns
         );
     }
@@ -119,7 +137,9 @@ fn cancellation_grace_allocations_are_excluded_from_resource_samples() {
             .is_some_and(|value| *value < 128 * 1024 * 1024),
         "{usage:?}"
     );
-    assert!(usage.collection.last_sample_offset_ns <= result.record.phase_duration_ns);
+    assert!(
+        usage.collection.value().unwrap().last_sample_offset_ns <= result.record.phase_duration_ns
+    );
 }
 
 #[test]

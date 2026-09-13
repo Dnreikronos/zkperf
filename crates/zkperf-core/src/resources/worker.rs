@@ -60,12 +60,7 @@ impl Sampler {
         self.worker
             .take()
             .and_then(|worker| worker.join().ok())
-            .unwrap_or_else(|| {
-                ResourceEvidence::unavailable(
-                    "collector_failed",
-                    "Resource worker could not start or complete.",
-                )
-            })
+            .unwrap_or_else(ResourceEvidence::collector_failed)
     }
 }
 
@@ -100,13 +95,16 @@ fn collect(
             "not_observed",
             "The adapter's process identity could not be read before reap.",
         );
-        evidence.collection.collection_duration_ns = setup_cost;
-        evidence.collection.max_collection_duration_ns = setup_cost;
+        evidence.collection_mut().collection_duration_ns = setup_cost;
+        evidence.collection_mut().max_collection_duration_ns = setup_cost;
         return evidence;
     };
     let mut aggregate = Aggregate::new(root.pid, root.started);
-    aggregate.evidence.collection.collection_duration_ns = setup_cost;
-    aggregate.evidence.collection.max_collection_duration_ns = setup_cost;
+    aggregate.evidence.collection_mut().collection_duration_ns = setup_cost;
+    aggregate
+        .evidence
+        .collection_mut()
+        .max_collection_duration_ns = setup_cost;
     loop {
         if let Ok(stopped) = stop.try_recv() {
             return aggregate.finish(stopped.duration_since(start).min(limit));
@@ -123,11 +121,14 @@ fn collect(
         }
         let completed = Instant::now();
         let cost = completed.duration_since(sweep);
-        let stats = &mut aggregate.evidence.collection;
+        let stats = aggregate.evidence.collection_mut();
         stats.collection_duration_ns = stats.collection_duration_ns.saturating_add(nanos(cost));
         stats.max_collection_duration_ns = stats.max_collection_duration_ns.max(nanos(cost));
-        candidate.evidence.collection.collection_duration_ns = stats.collection_duration_ns;
-        candidate.evidence.collection.max_collection_duration_ns = stats.max_collection_duration_ns;
+        candidate.evidence.collection_mut().collection_duration_ns = stats.collection_duration_ns;
+        candidate
+            .evidence
+            .collection_mut()
+            .max_collection_duration_ns = stats.max_collection_duration_ns;
         if let Ok(stopped) = stop.try_recv() {
             return aggregate.finish(stopped.duration_since(start).min(limit));
         }
@@ -196,4 +197,30 @@ fn identify(pid: u32) -> Option<Identity> {
         pid: pid.as_u32(),
         started: process.start_time(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_or_panicked_worker_does_not_fabricate_zero_diagnostics() {
+        let panicked = thread::spawn(|| {
+            let mut aggregate = Aggregate::new(1, 10);
+            aggregate.sample(&[], INTERVAL);
+            assert_eq!(aggregate.evidence.collection.value().unwrap().samples, 1);
+            panic!("collector failed after sampling");
+        });
+        for worker in [None, Some(panicked)] {
+            let sampler = Sampler {
+                stop: None,
+                worker,
+                ready: Arc::new(AtomicBool::new(true)),
+            };
+            let evidence = serde_json::to_value(sampler.finish()).unwrap();
+            assert_eq!(evidence["collection"]["availability"], "unavailable");
+            assert_eq!(evidence["collection"]["reason"]["code"], "collector_failed");
+            assert!(evidence["collection"].get("samples").is_none());
+        }
+    }
 }

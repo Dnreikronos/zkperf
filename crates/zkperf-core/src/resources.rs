@@ -150,12 +150,28 @@ pub struct ResourceEvidence {
     pub target_worker_duty_cycle_percent: u8,
     pub max_tracked_processes: usize,
     pub max_tracked_io_tasks: usize,
-    pub collection: CollectionDiagnostics,
+    pub collection: Observed<CollectionDiagnostics>,
     pub limitations: Vec<&'static str>,
     pub extensions: BTreeMap<String, Value>,
 }
 
 impl ResourceEvidence {
+    fn collector_failed() -> Self {
+        let code = "collector_failed";
+        let message =
+            "Resource worker could not start or complete; its diagnostics are unavailable.";
+        let mut evidence = Self::unavailable(code, message);
+        evidence.collection = Observed::gap(code, message);
+        evidence
+    }
+
+    fn collection_mut(&mut self) -> &mut CollectionDiagnostics {
+        match &mut self.collection {
+            Observed::Available(collection) => collection,
+            Observed::Unavailable(_) => unreachable!("failed collectors cannot accept samples"),
+        }
+    }
+
     pub(crate) fn unavailable(code: &str, message: &str) -> Self {
         Self {
             capture_version: "1.0.0",
@@ -170,7 +186,7 @@ impl ResourceEvidence {
             target_worker_duty_cycle_percent: 5,
             max_tracked_processes: MAX_PROCESSES,
             max_tracked_io_tasks: MAX_PROCESSES,
-            collection: CollectionDiagnostics::default(),
+            collection: CollectionDiagnostics::default().into(),
             limitations: vec![
                 "Partial sampled process tree: short-lived or already-reparented children and final counter increments may be missed.",
                 "RSS is a non-atomic sampled sum, not a kernel high-water mark; shared pages may be counted more than once.",
