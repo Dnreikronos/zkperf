@@ -23,7 +23,9 @@
   needs a new report version, even when all older examples still validate.
 - Start subprocess deadline assertions after fixture setup. Run creation collects
   host metadata and hashes the executable; including that work makes supervisor
-  tests depend on CI machine speed and debug-binary size.
+  tests depend on CI machine speed and debug-binary size. For subprocess tests
+  that check for blocking I/O, signal readiness after setup and give setup its
+  own timeout so a slow fixture is not reported as a blocked read.
 - Linux process I/O includes waited-for children. Summing `/proc/PID/io` with
   retained descendant counters double-counts work after reap. Sample per-thread
   I/O and test a writing grandchild whose parent and grandparent both wait.
