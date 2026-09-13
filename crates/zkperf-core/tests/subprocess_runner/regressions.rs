@@ -9,7 +9,7 @@ fn invalid_diagnostic_artifacts_preserve_adapter_failure_status() {
         ("success", OperationOutcome::ArtifactError),
     ] {
         for problem in ["digest", "missing"] {
-            let fixture = Fixture::new();
+            let mut fixture = Fixture::new();
             let mode = format!("artifact-diagnostic-{status}-{problem}");
             let (result, _) =
                 fixture.run(&fixture.invocation(&mode), &CancellationToken::default());

@@ -21,3 +21,6 @@
   test case and separator variants inside nested objects and arrays.
 - Published schema versions are immutable. Allowing objects in scalar fields
   needs a new report version, even when all older examples still validate.
+- Start subprocess deadline assertions after fixture setup. Run creation collects
+  host metadata and hashes the executable; including that work makes supervisor
+  tests depend on CI machine speed and debug-binary size.
