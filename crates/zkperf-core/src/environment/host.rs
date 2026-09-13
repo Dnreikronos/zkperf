@@ -54,7 +54,7 @@ pub(super) fn collect() -> HostMetadata {
         cpu: CpuMetadata::new(
             text(Some(&model)),
             cpu_field("stepping"),
-            physical_cores(&system),
+            physical_cores(),
             count(system.cpus().len().try_into().ok()),
         ),
         ram_bytes: count(Some(system.total_memory())),
@@ -94,16 +94,12 @@ fn architecture() -> Observed<Architecture> {
     )
 }
 
-fn physical_cores(system: &System) -> Observed<NonZeroU64> {
+fn physical_cores() -> Observed<NonZeroU64> {
     if cfg!(target_os = "linux") {
         let source = std::fs::read_to_string("/proc/cpuinfo").ok();
         count(source.as_deref().and_then(linux_physical_cores))
     } else {
-        count(
-            system
-                .physical_core_count()
-                .and_then(|value| value.try_into().ok()),
-        )
+        count(System::physical_core_count().and_then(|value| value.try_into().ok()))
     }
 }
 

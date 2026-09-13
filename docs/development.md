@@ -64,7 +64,7 @@ The runner's integration tests require Python 3.10+ (`python3` on Unix, `python`
 on Windows) for subprocess fixtures. Run the focused execution checks with
 `cargo test -p zkperf-core --test subprocess_runner -p zkperf-cli --test execution`.
 
-Environment capture uses `sysinfo` 0.33 with only its `system` feature, compatible
+Environment capture uses `sysinfo` 0.36.1 with only its `system` feature, compatible
 with the workspace MSRV. It refreshes static CPU and RAM metadata without process
 or user enumeration. Platform gaps and safe settings are documented in the
 [environment capture contract](environment-fingerprint-v1.md). The dependency

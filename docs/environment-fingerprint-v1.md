@@ -35,7 +35,7 @@ survive failed adapter startup, failed preparation, timeout, and cancellation.
 
 ## Sources and platform gaps
 
-`sysinfo` 0.33 supplies OS, kernel, CPU brands and
+`sysinfo` 0.36.1 supplies OS, kernel, CPU brands and
 logical CPU counts, and installed RAM on Linux, macOS, and Windows. Physical
 core counts use host APIs on macOS/Windows and require complete socket/core IDs
 in Linux `/proc/cpuinfo`; logical processors are never substituted for missing
