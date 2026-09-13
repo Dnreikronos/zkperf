@@ -1,6 +1,9 @@
+#[cfg(test)]
+mod tests;
+
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 use std::thread::{self, JoinHandle};
@@ -12,9 +15,25 @@ use super::aggregate::{Aggregate, Counters, Identity, Process};
 use super::{INTERVAL, ResourceEvidence, nanos};
 
 pub(crate) struct Sampler {
-    stop: Option<Sender<Instant>>,
+    stop: Option<Sender<()>>,
+    boundary: Arc<StopBoundary>,
     worker: Option<JoinHandle<ResourceEvidence>>,
     ready: Arc<AtomicBool>,
+}
+
+#[derive(Default)]
+struct StopBoundary(Mutex<Option<Instant>>);
+
+impl StopBoundary {
+    fn request(&self) -> Instant {
+        // Capture and publish together, so a delayed wakeup cannot hide an
+        // earlier stop timestamp from the sweep commit check.
+        *self.0.lock().unwrap().get_or_insert_with(Instant::now)
+    }
+
+    fn at(&self) -> Option<Instant> {
+        *self.0.lock().unwrap()
+    }
 }
 
 struct Bootstrap(Arc<AtomicBool>);
@@ -28,17 +47,20 @@ impl Drop for Bootstrap {
 impl Sampler {
     pub fn start(pid: u32, start: Instant, limit: Duration) -> Self {
         let (send, receive) = mpsc::channel();
+        let boundary = Arc::new(StopBoundary::default());
+        let worker_boundary = Arc::clone(&boundary);
         let ready = Arc::new(AtomicBool::new(false));
         let bootstrap = Bootstrap(Arc::clone(&ready));
         let worker = thread::Builder::new()
             .name("zkperf-resources".into())
-            .spawn(move || collect(pid, start, limit, &receive, bootstrap))
+            .spawn(move || collect(pid, start, limit, &worker_boundary, &receive, bootstrap))
             .ok();
         if worker.is_none() {
             ready.store(true, Ordering::Release);
         }
         Self {
             stop: Some(send),
+            boundary,
             worker,
             ready,
         }
@@ -49,10 +71,11 @@ impl Sampler {
     }
 
     pub fn stop(&mut self) -> Instant {
+        let stopped = self.boundary.request();
         if let Some(send) = self.stop.take() {
-            let _ = send.send(Instant::now());
+            let _ = send.send(());
         }
-        Instant::now()
+        stopped
     }
 
     pub fn finish(mut self) -> ResourceEvidence {
@@ -77,7 +100,8 @@ fn collect(
     pid: u32,
     start: Instant,
     limit: Duration,
-    stop: &Receiver<Instant>,
+    stop: &StopBoundary,
+    wake: &Receiver<()>,
     bootstrap: Bootstrap,
 ) -> ResourceEvidence {
     if !matches!(std::env::consts::OS, "linux" | "macos" | "windows") {
@@ -106,7 +130,7 @@ fn collect(
         .collection_mut()
         .max_collection_duration_ns = setup_cost;
     loop {
-        if let Ok(stopped) = stop.try_recv() {
+        if let Some(stopped) = stop.at() {
             return aggregate.finish(stopped.duration_since(start).min(limit));
         }
         if start.elapsed() >= limit {
@@ -121,28 +145,44 @@ fn collect(
         }
         let completed = Instant::now();
         let cost = completed.duration_since(sweep);
-        let stats = aggregate.evidence.collection_mut();
-        stats.collection_duration_ns = stats.collection_duration_ns.saturating_add(nanos(cost));
-        stats.max_collection_duration_ns = stats.max_collection_duration_ns.max(nanos(cost));
-        candidate.evidence.collection_mut().collection_duration_ns = stats.collection_duration_ns;
-        candidate
-            .evidence
-            .collection_mut()
-            .max_collection_duration_ns = stats.max_collection_duration_ns;
-        if let Ok(stopped) = stop.try_recv() {
+        let stopped = stop.at();
+        let boundary = stopped.map_or(limit, |at| at.duration_since(start).min(limit));
+        complete_sweep(&mut aggregate, candidate, start, sweep, completed, boundary);
+        if let Some(stopped) = stopped {
             return aggregate.finish(stopped.duration_since(start).min(limit));
         }
         if completed.duration_since(start) >= limit {
             return aggregate.finish(limit);
         }
-        aggregate = candidate;
-        match stop.recv_timeout(wait_duration(cost).min(limit.saturating_sub(start.elapsed()))) {
-            Ok(stopped) => return aggregate.finish(stopped.duration_since(start).min(limit)),
-            Err(RecvTimeoutError::Disconnected) => {
-                return aggregate.finish(start.elapsed().min(limit));
+        match wake.recv_timeout(wait_duration(cost).min(limit.saturating_sub(start.elapsed()))) {
+            Ok(()) | Err(RecvTimeoutError::Disconnected) => {
+                let elapsed = stop.at().unwrap_or_else(Instant::now).duration_since(start);
+                return aggregate.finish(elapsed.min(limit));
             }
             Err(RecvTimeoutError::Timeout) => {}
         }
+    }
+}
+
+fn complete_sweep(
+    aggregate: &mut Aggregate,
+    mut candidate: Aggregate,
+    start: Instant,
+    sweep: Instant,
+    completed: Instant,
+    boundary: Duration,
+) {
+    let cost = nanos(completed.duration_since(sweep));
+    let stats = aggregate.evidence.collection_mut();
+    stats.collection_duration_ns = stats.collection_duration_ns.saturating_add(cost);
+    stats.max_collection_duration_ns = stats.max_collection_duration_ns.max(cost);
+    candidate.evidence.collection_mut().collection_duration_ns = stats.collection_duration_ns;
+    candidate
+        .evidence
+        .collection_mut()
+        .max_collection_duration_ns = stats.max_collection_duration_ns;
+    if completed.duration_since(start) < boundary {
+        *aggregate = candidate;
     }
 }
 
@@ -197,30 +237,4 @@ fn identify(pid: u32) -> Option<Identity> {
         pid: pid.as_u32(),
         started: process.start_time(),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn missing_or_panicked_worker_does_not_fabricate_zero_diagnostics() {
-        let panicked = thread::spawn(|| {
-            let mut aggregate = Aggregate::new(1, 10);
-            aggregate.sample(&[], INTERVAL);
-            assert_eq!(aggregate.evidence.collection.value().unwrap().samples, 1);
-            panic!("collector failed after sampling");
-        });
-        for worker in [None, Some(panicked)] {
-            let sampler = Sampler {
-                stop: None,
-                worker,
-                ready: Arc::new(AtomicBool::new(true)),
-            };
-            let evidence = serde_json::to_value(sampler.finish()).unwrap();
-            assert_eq!(evidence["collection"]["availability"], "unavailable");
-            assert_eq!(evidence["collection"]["reason"]["code"], "collector_failed");
-            assert!(evidence["collection"].get("samples").is_none());
-        }
-    }
 }
