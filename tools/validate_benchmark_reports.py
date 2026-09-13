@@ -11,7 +11,10 @@ from typing import Any
 from jsonschema import Draft202012Validator, FormatChecker
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SCHEMA = ROOT / "schemas" / "benchmark-report-v1.schema.json"
+SCHEMAS = {
+    "1.0.0": ROOT / "schemas" / "benchmark-report-v1.schema.json",
+    "2.0.0": ROOT / "schemas" / "benchmark-report-v2.schema.json",
+}
 PROOF_PHASES = {"proving", "compression", "verification", "end_to_end"}
 PROOF_COMPONENTS = {"proving", "compression", "verification"}
 STATUSES = ("success", "unsupported", "failed", "timed_out", "invalid")
@@ -461,7 +464,14 @@ def _semantic_issues(report: dict[str, Any]) -> list[str]:
     return issues
 
 
-def validate_report(report: dict[str, Any], schema: dict[str, Any]) -> list[str]:
+def validate_report(
+    report: dict[str, Any], schema: dict[str, Any] | None = None
+) -> list[str]:
+    if schema is None:
+        version = report.get("schema_version") if isinstance(report, dict) else None
+        if not isinstance(version, str) or version not in SCHEMAS:
+            return [f"schema /schema_version: unsupported report version {version!r}"]
+        schema = json.loads(SCHEMAS[version].read_text(encoding="utf-8"))
     schema_issues = _schema_issues(report, schema)
     if schema_issues:
         return schema_issues
@@ -470,14 +480,16 @@ def validate_report(report: dict[str, Any], schema: dict[str, Any]) -> list[str]
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Validate zkperf BenchmarkReport v1 documents."
+        description="Validate zkperf BenchmarkReport documents by their declared version."
     )
     parser.add_argument("reports", nargs="+", type=Path)
-    parser.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA)
+    parser.add_argument("--schema", type=Path, help="Override version-based schema selection")
     args = parser.parse_args()
 
-    schema = json.loads(args.schema.read_text(encoding="utf-8"))
-    Draft202012Validator.check_schema(schema)
+    schema = None
+    if args.schema is not None:
+        schema = json.loads(args.schema.read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(schema)
     failed = False
     for path in args.reports:
         try:

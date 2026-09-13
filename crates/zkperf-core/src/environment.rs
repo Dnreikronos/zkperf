@@ -8,11 +8,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::{ClockMetadata, HostMetadata, NonEmptyString, Observed, Sha256Digest};
 
+/// Environment captures evolve independently of complete benchmark reports.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum CaptureVersion {
+    #[serde(rename = "1.0.0")]
+    V1_0_0,
+}
+
 /// Immutable input to the environment digest. It contains no run identity or time.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct EnvironmentCapture {
-    pub capture_version: crate::SchemaVersion,
+    pub capture_version: CaptureVersion,
     pub host: HostMetadata,
     pub clock: ClockMetadata,
     pub harness: HarnessBuild,
@@ -49,7 +56,7 @@ impl EnvironmentCapture {
                 |(digest, _)| digest.into(),
             );
         Self {
-            capture_version: crate::SchemaVersion::V1_0_0,
+            capture_version: CaptureVersion::V1_0_0,
             host: host::collect(),
             clock: ClockMetadata::new(
                 NonEmptyString::new("std::time::Instant").unwrap(),

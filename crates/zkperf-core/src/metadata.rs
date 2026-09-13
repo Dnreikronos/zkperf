@@ -1297,6 +1297,27 @@ pub struct EnvironmentMetadataParts {
 }
 
 impl EnvironmentMetadata {
+    pub(crate) fn supports_v1(&self) -> bool {
+        let host = &self.host;
+        host.machine_id.value().is_some()
+            && host.architecture.value().is_some()
+            && host.cpu.model.value().is_some()
+            && host.cpu.stepping.value().is_some()
+            && host.cpu.physical_cores.value().is_some()
+            && host.cpu.logical_cores.value().is_some()
+            && host.ram_bytes.value().is_some()
+            && host.accelerators.value().is_some()
+            && host.storage.value().is_some()
+            && host.operating_system.name.value().is_some()
+            && host.operating_system.version.value().is_some()
+            && host.operating_system.kernel.value().is_some()
+            && host
+                .firmware_or_microcode
+                .as_ref()
+                .is_none_or(|value| value.value().is_some())
+            && self.clock.resolution_ns.value().is_some()
+    }
+
     #[must_use]
     pub fn new(parts: EnvironmentMetadataParts) -> Self {
         Self {

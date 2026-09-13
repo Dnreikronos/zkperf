@@ -16,3 +16,8 @@
   Keep that resolved configuration before filtering settings for an operation;
   otherwise metadata can lose settings targeted at a later stage. Test both
   active overrides and overrides intended for another stage.
+- Secret-key checks need known credential aliases as well as words like token
+  and password. Keep manifest validation and saved metadata on the same check;
+  test case and separator variants inside nested objects and arrays.
+- Published schema versions are immutable. Allowing objects in scalar fields
+  needs a new report version, even when all older examples still validate.

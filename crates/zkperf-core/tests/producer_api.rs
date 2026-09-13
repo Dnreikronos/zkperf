@@ -194,7 +194,7 @@ fn external_producer_builds_report_without_json_deserialization() {
 
     let json = serde_json::to_string(&report).unwrap();
     let round_tripped = BenchmarkReport::from_json(&json).unwrap();
-    assert_eq!(round_tripped.as_v1(), &report);
+    assert_eq!(round_tripped.as_v1(), Some(&report));
 }
 
 #[test]

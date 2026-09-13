@@ -15,7 +15,7 @@ mod runner;
 mod sample;
 mod types;
 
-pub use environment::{EnvironmentCapture, HarnessBuild};
+pub use environment::{CaptureVersion, EnvironmentCapture, HarnessBuild};
 pub use execution::{ExecutionResult, execute_plan};
 pub use init::initialize;
 pub use manifest::{
@@ -46,8 +46,8 @@ pub use observed::{Observed, UnavailableMetadata};
 pub use plan::{BenchmarkPlan, FileProvenance, PlanError, PlannedJob};
 pub use report::{
     Artifact, ArtifactKind, ArtifactParts, BenchmarkJob, BenchmarkReport, BenchmarkReportV1,
-    BenchmarkReportV1Parts, CompatibilityMetadata, ReportError, ReportStatus, RunMetadata,
-    RunMetadataParts, Warning,
+    BenchmarkReportV1Parts, BenchmarkReportV2, BenchmarkReportV2Parts, CompatibilityMetadata,
+    ReportError, ReportStatus, RunMetadata, RunMetadataParts, Warning,
 };
 pub use run::{
     ArtifactRequest, RunDirectory, RunError, RunOutcome, RunRecord, RunState, RunWorkspace,

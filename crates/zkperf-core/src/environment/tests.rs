@@ -48,6 +48,9 @@ fn host_capture_and_hash_round_trip_without_volatile_data() {
     let value = serde_json::to_value(&first).unwrap();
     let restored: EnvironmentCapture = serde_json::from_value(value.clone()).unwrap();
     assert_eq!(restored.digest(), first.digest());
+    let mut wrong_version = value.clone();
+    wrong_version["capture_version"] = json!("2.0.0");
+    assert!(serde_json::from_value::<EnvironmentCapture>(wrong_version).is_err());
     assert_eq!(value["harness"]["version"], env!("CARGO_PKG_VERSION"));
     assert!(
         value["harness"]["rustc"]
@@ -74,7 +77,7 @@ fn host_capture_and_hash_round_trip_without_volatile_data() {
 fn collected_host_and_clock_are_valid_in_complete_and_failed_reports() {
     let capture = EnvironmentCapture::collect(&BTreeMap::new());
     let schema: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../../schemas/benchmark-report-v1.schema.json"
+        "../../../../schemas/benchmark-report-v2.schema.json"
     ))
     .unwrap();
     let validator = jsonschema::validator_for(&schema).unwrap();
@@ -83,6 +86,7 @@ fn collected_host_and_clock_are_valid_in_complete_and_failed_reports() {
         include_str!("../../../../examples/reports/failed.json"),
     ] {
         let mut value: serde_json::Value = serde_json::from_str(source).unwrap();
+        value["schema_version"] = json!("2.0.0");
         value["environment"]["host"] = serde_json::to_value(&capture.host).unwrap();
         value["environment"]["clock"] = serde_json::to_value(&capture.clock).unwrap();
         assert!(validator.is_valid(&value));

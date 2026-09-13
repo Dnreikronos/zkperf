@@ -354,15 +354,18 @@ impl<'de> Deserialize<'de> for SemanticVersion {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum SchemaVersion {
     V1_0_0,
+    V2_0_0,
 }
 
 impl SchemaVersion {
     pub const V1: &str = "1.0.0";
+    pub const V2: &str = "2.0.0";
 
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::V1_0_0 => Self::V1,
+            Self::V2_0_0 => Self::V2,
         }
     }
 }
@@ -389,6 +392,7 @@ impl<'de> Deserialize<'de> for SchemaVersion {
     {
         match String::deserialize(deserializer)?.as_str() {
             Self::V1 => Ok(Self::V1_0_0),
+            Self::V2 => Ok(Self::V2_0_0),
             version => Err(D::Error::custom(format!(
                 "unsupported BenchmarkReport schema version {version}"
             ))),
@@ -824,6 +828,6 @@ mod tests {
     fn validated_strings_and_versions_reject_invalid_input() {
         assert!(Slug::new("not a slug").is_err());
         assert!(Timestamp::parse("yesterday").is_err());
-        assert!(serde_json::from_str::<SchemaVersion>(r#""2.0.0""#).is_err());
+        assert!(serde_json::from_str::<SchemaVersion>(r#""3.0.0""#).is_err());
     }
 }

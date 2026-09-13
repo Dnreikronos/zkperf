@@ -15,6 +15,9 @@ use crate::{
 };
 
 mod validation;
+mod versioned;
+
+pub use versioned::{BenchmarkReportV1, BenchmarkReportV2, BenchmarkReportV2Parts};
 
 const FAIRNESS_CONTRACT_ID: &str = "zkperf-fairness";
 
@@ -25,6 +28,7 @@ pub enum ReportError {
     EmptyPlannedOrder,
     InvalidMediaType,
     SecurityBelowTarget,
+    UnavailableMetadataInV1,
     InvalidGraph(String),
 }
 
@@ -38,6 +42,9 @@ impl Display for ReportError {
             Self::InvalidMediaType => formatter.write_str("invalid artifact media type"),
             Self::SecurityBelowTarget => {
                 formatter.write_str("configured engine security is below benchmark target")
+            }
+            Self::UnavailableMetadataInV1 => {
+                formatter.write_str("unavailable environment metadata requires report schema 2.0.0")
             }
             Self::InvalidGraph(message) => formatter.write_str(message),
         }
@@ -371,7 +378,7 @@ impl Warning {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct BenchmarkReportV1 {
+struct ReportData {
     schema_version: SchemaVersion,
     report_id: ReportId,
     contract: CompatibilityMetadata,
@@ -401,20 +408,20 @@ pub struct BenchmarkReportV1Parts {
     pub extensions: Option<Extensions>,
 }
 
-impl BenchmarkReportV1 {
-    /// Constructs a validated `BenchmarkReport` v1.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`ReportError`] when measurements are empty or duplicated, or
-    /// when the final report status conflicts with observed outcomes.
-    pub fn new(parts: BenchmarkReportV1Parts) -> Result<Self, ReportError> {
+impl ReportData {
+    fn new(
+        parts: BenchmarkReportV1Parts,
+        schema_version: SchemaVersion,
+    ) -> Result<Self, ReportError> {
+        if schema_version == SchemaVersion::V1_0_0 && !parts.environment.supports_v1() {
+            return Err(ReportError::UnavailableMetadataInV1);
+        }
         if parts.engine.configured_security_bits() < parts.benchmark.security_target_bits() {
             return Err(ReportError::SecurityBelowTarget);
         }
         validation::validate_report(&parts)?;
         Ok(Self {
-            schema_version: SchemaVersion::V1_0_0,
+            schema_version,
             report_id: parts.report_id,
             contract: parts.contract,
             run: parts.run,
@@ -428,19 +435,9 @@ impl BenchmarkReportV1 {
             extensions: parts.extensions,
         })
     }
-
-    #[must_use]
-    pub fn measurements(&self) -> &[Measurement] {
-        &self.measurements
-    }
-
-    #[must_use]
-    pub const fn status(&self) -> &ReportStatus {
-        &self.status
-    }
 }
 
-impl<'de> Deserialize<'de> for BenchmarkReportV1 {
+impl<'de> Deserialize<'de> for ReportData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -464,20 +461,22 @@ impl<'de> Deserialize<'de> for BenchmarkReportV1 {
         }
 
         let raw = Raw::deserialize(deserializer)?;
-        let _ = raw.schema_version;
-        Self::new(BenchmarkReportV1Parts {
-            report_id: raw.report_id,
-            contract: raw.contract,
-            run: raw.run,
-            benchmark: raw.benchmark,
-            engine: raw.engine,
-            environment: raw.environment,
-            measurements: raw.measurements,
-            artifacts: raw.artifacts,
-            warnings: raw.warnings,
-            status: raw.status,
-            extensions: raw.extensions,
-        })
+        Self::new(
+            BenchmarkReportV1Parts {
+                report_id: raw.report_id,
+                contract: raw.contract,
+                run: raw.run,
+                benchmark: raw.benchmark,
+                engine: raw.engine,
+                environment: raw.environment,
+                measurements: raw.measurements,
+                artifacts: raw.artifacts,
+                warnings: raw.warnings,
+                status: raw.status,
+                extensions: raw.extensions,
+            },
+            raw.schema_version,
+        )
         .map_err(D::Error::custom)
     }
 }
@@ -485,6 +484,7 @@ impl<'de> Deserialize<'de> for BenchmarkReportV1 {
 #[derive(Clone, Debug, PartialEq)]
 pub enum BenchmarkReport {
     V1(BenchmarkReportV1),
+    V2(BenchmarkReportV2),
 }
 
 impl BenchmarkReport {
@@ -499,9 +499,18 @@ impl BenchmarkReport {
     }
 
     #[must_use]
-    pub const fn as_v1(&self) -> &BenchmarkReportV1 {
+    pub const fn as_v1(&self) -> Option<&BenchmarkReportV1> {
         match self {
-            Self::V1(report) => report,
+            Self::V1(report) => Some(report),
+            Self::V2(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn as_v2(&self) -> Option<&BenchmarkReportV2> {
+        match self {
+            Self::V1(_) => None,
+            Self::V2(report) => Some(report),
         }
     }
 }
@@ -513,6 +522,7 @@ impl Serialize for BenchmarkReport {
     {
         match self {
             Self::V1(report) => report.serialize(serializer),
+            Self::V2(report) => report.serialize(serializer),
         }
     }
 }
@@ -526,6 +536,9 @@ impl<'de> Deserialize<'de> for BenchmarkReport {
         match value.get("schema_version").and_then(Value::as_str) {
             Some(SchemaVersion::V1) => serde_json::from_value(value)
                 .map(Self::V1)
+                .map_err(D::Error::custom),
+            Some(SchemaVersion::V2) => serde_json::from_value(value)
+                .map(Self::V2)
                 .map_err(D::Error::custom),
             Some(version) => Err(D::Error::custom(format!(
                 "unsupported BenchmarkReport schema version {version}"
@@ -567,12 +580,13 @@ mod tests {
     fn failure_timeout_and_unsupported_states_remain_explicit() {
         let failed = BenchmarkReport::from_json(EXAMPLES[1]).unwrap();
         assert!(matches!(
-            failed.as_v1().status(),
+            failed.as_v1().unwrap().status(),
             ReportStatus::Failed { .. }
         ));
         assert!(
             failed
                 .as_v1()
+                .unwrap()
                 .measurements()
                 .iter()
                 .any(|measurement| measurement.has_sample_status(SampleStatus::Failed))
@@ -582,6 +596,7 @@ mod tests {
         assert!(
             timed_out
                 .as_v1()
+                .unwrap()
                 .measurements()
                 .iter()
                 .any(|measurement| measurement.has_sample_status(SampleStatus::TimedOut))
@@ -591,6 +606,7 @@ mod tests {
         assert!(
             partially_supported
                 .as_v1()
+                .unwrap()
                 .measurements()
                 .iter()
                 .any(|measurement| measurement.availability() == Availability::Unavailable)
@@ -604,7 +620,7 @@ mod tests {
         assert!(serde_json::from_value::<BenchmarkReport>(wrong_unit).is_err());
 
         let mut wrong_version: Value = serde_json::from_str(EXAMPLES[0]).unwrap();
-        wrong_version["schema_version"] = Value::String("2.0.0".to_owned());
+        wrong_version["schema_version"] = Value::String("3.0.0".to_owned());
         assert!(serde_json::from_value::<BenchmarkReport>(wrong_version).is_err());
     }
 

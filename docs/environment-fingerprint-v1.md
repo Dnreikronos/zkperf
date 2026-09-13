@@ -29,7 +29,8 @@ survive failed adapter startup, failed preparation, timeout, and cancellation.
   Each snapshot is immutable and indexed with a content digest. Metadata queried
   after preparation receives prepared artifacts. Unreached stages have explicit
   unavailable metadata; earlier snapshots survive a subsequent failure.
-- The report schema and Rust metadata types accept the same unavailable form.
+- [Report v2](benchmark-report-v2.md) and Rust metadata types accept the same
+  unavailable form. Report v1 retains its original scalar requirements.
   Missing disclosure is evidence of a compatibility gap, not proof of compliance.
 
 ## Sources and platform gaps
@@ -62,6 +63,8 @@ decimal `u32` values), plus `OMP_DYNAMIC` and `OMP_NESTED` (`true`, `false`,
 and their values are omitted. The manifest independently rejects secret-like
 environment names. The existing protocol requires adapters to return non-secret
 metadata; runtime configuration snapshots also redact secret-like keys recursively.
+The shared key check includes `DOCKER_AUTH_CONFIG` and `SSH_AUTH_SOCK`, ignoring
+case and separators, for both manifest rejection and metadata redaction.
 
 ## Persisted layout and hashes
 
