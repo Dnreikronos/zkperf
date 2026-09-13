@@ -14,11 +14,10 @@ pub(super) struct LinuxIo {
 
 impl LinuxIo {
     pub fn sample(&mut self, processes: &[Identity], stats: &mut CollectionDiagnostics) {
+        let clock = process_clock();
         let mut visited = 0;
         for process in processes {
-            let Ok(tasks) =
-                Dir::open_ambient_dir(format!("/proc/{}/task", process.pid), ambient_authority())
-            else {
+            let Some(tasks) = open_tasks(*process, clock) else {
                 stats.io_failed_reads += 1;
                 continue;
             };
@@ -77,6 +76,33 @@ impl LinuxIo {
     }
 }
 
+fn process_clock() -> Option<(u64, u64)> {
+    #[cfg(target_os = "linux")]
+    {
+        let boot_time = sysinfo::System::boot_time();
+        let ticks_per_second = rustix::param::clock_ticks_per_second();
+        (boot_time != 0 && ticks_per_second != 0).then_some((boot_time, ticks_per_second))
+    }
+    #[cfg(not(target_os = "linux"))]
+    None
+}
+
+fn open_tasks(process: Identity, clock: Option<(u64, u64)>) -> Option<Dir> {
+    let (boot_time, ticks_per_second) = clock?;
+    let directory =
+        Dir::open_ambient_dir(format!("/proc/{}", process.pid), ambient_authority()).ok()?;
+    let ticks = start_ticks(&directory.read_to_string("stat").ok()?)?;
+    // Match sysinfo's whole Unix seconds before attaching tasks to its snapshot.
+    let started = ticks
+        .checked_div(ticks_per_second)?
+        .checked_add(boot_time)?;
+    if started != process.started {
+        return None;
+    }
+    // Stay on the validated proc handle even if the numeric PID is reused.
+    directory.open_dir("task").ok()
+}
+
 fn start_ticks(stat: &str) -> Option<u64> {
     // comm may contain spaces and parentheses; field 22 follows its final ')'.
     stat.rsplit_once(')')?
@@ -100,6 +126,54 @@ fn parse_io(contents: &str) -> Option<(u64, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    fn live_identity() -> Identity {
+        let pid = sysinfo::Pid::from_u32(std::process::id());
+        let mut system = sysinfo::System::new();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::Some(&[pid]),
+            true,
+            sysinfo::ProcessRefreshKind::nothing().without_tasks(),
+        );
+        Identity {
+            pid: pid.as_u32(),
+            started: system.process(pid).unwrap().start_time(),
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn stale_process_identity_rejects_live_tasks_and_preserves_prior_counters() {
+        let live = live_identity();
+        for started in [1, live.started - 1] {
+            let stale = Identity { started, ..live };
+            let mut io = LinuxIo::default();
+            let mut stats = CollectionDiagnostics::default();
+            io.sample(&[stale], &mut stats);
+            assert_eq!(stats.io_failed_reads, 1);
+            assert_eq!(stats.io_observed_tasks, 0);
+            assert_eq!(io.total(&mut stats), (0, 0));
+
+            io.observe((stale, stale.pid, 100), (5, 6), &mut stats);
+            io.sample(&[stale], &mut stats);
+            assert_eq!(stats.io_failed_reads, 2);
+            assert_eq!(stats.io_observed_tasks, 1);
+            assert_eq!(io.total(&mut stats), (5, 6));
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn matching_process_identity_collects_live_task_counters() {
+        let live = live_identity();
+        let mut io = LinuxIo::default();
+        let mut stats = CollectionDiagnostics::default();
+        io.sample(&[live], &mut stats);
+        assert!(stats.io_observed_tasks > 0);
+        assert!(io.retained.keys().all(|(identity, _, _)| *identity == live));
+        assert!(io.retained.keys().any(|(_, tid, _)| *tid == live.pid));
+    }
 
     #[test]
     fn thread_io_does_not_inherit_reaped_children_and_reused_tids_are_separate() {

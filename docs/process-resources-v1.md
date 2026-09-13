@@ -21,6 +21,11 @@ producer in issue #16; published BenchmarkReport schemas remain unchanged.
   and threads retain their last observations. Short-lived threads and their final
   counter increments can be missed. Thread identity includes native start ticks;
   open proc directory handles and before/after identity reads reject read races.
+  Before reading tasks, the collector checks the opened process's start time
+  against its snapshot identity, converting proc clock ticks to sysinfo's whole
+  Unix seconds. It opens tasks relative to that same process directory so PID
+  reuse cannot redirect the reads after validation. An identity mismatch or
+  unreadable identity records an I/O read failure and retains only earlier data.
 - RSS is the maximum of the sum of resident bytes in a sampling sweep. It is
   neither an exact high-water mark nor the sum of individual lifetime peaks.
   Reads within a sweep are not simultaneous; shared pages can be counted twice.
@@ -77,6 +82,8 @@ their own scope and precision rather than relabeling the sampled RSS peak.
 
 Deterministic tests cover tree aggregation, reparenting, disappearing processes,
 counter regressions, PID reuse, unsupported providers, tracking caps and the
-sampling budget. Subprocess fixtures exercise child CPU, memory and I/O, plus
+sampling budget. Linux tests reject a stale start time for a live PID, preserve
+previous counters after rejection, and accept a matching sysinfo identity.
+Subprocess fixtures exercise child CPU, memory and I/O, plus
 retained resource evidence on success, failure, timeout and cancellation. Local
 platform results are distinguished from the other platforms' CI coverage.

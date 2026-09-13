@@ -29,6 +29,9 @@
 - Linux process I/O includes waited-for children. Summing `/proc/PID/io` with
   retained descendant counters double-counts work after reap. Sample per-thread
   I/O and test a writing grandchild whose parent and grandparent both wait.
+- Thread identity checks do not connect a proc read to an earlier process
+  snapshot. Validate the opened process's start time against the snapshot and
+  open tasks through that same directory handle before retaining I/O counters.
 - Counter units are not precision guarantees. Preserve sampled peak semantics,
   partial tree coverage, identity resolution and unavailable-read reasons with
   the values, including failed operations.
