@@ -70,13 +70,16 @@ fn descendants_contribute_cpu_memory_and_io_even_after_exit() {
 
 #[test]
 fn failures_and_timeouts_retain_resource_evidence() {
-    for (mode, limit, expected) in [
+    for (mode, limit, expected, minimum_processes) in [
         (
             "failure",
             10_000_000_000_u64,
             OperationOutcome::ProcessFailed,
+            3,
         ),
-        ("success", 1_500_000_000, OperationOutcome::TimedOut),
+        // A slow first sweep can back off past this short deadline before the
+        // descendants are sampled. The root's earlier evidence must survive.
+        ("success", 1_500_000_000, OperationOutcome::TimedOut, 1),
     ] {
         let mut fixture = Fixture::new();
         let mut invocation = invocation(&fixture, mode);
@@ -91,9 +94,17 @@ fn failures_and_timeouts_retain_resource_evidence() {
                 .value()
                 .unwrap()
                 .observed_processes
-                >= 3,
+                >= minimum_processes,
             "{:?}",
             result.record.resources
+        );
+        assert!(
+            result
+                .record
+                .resources
+                .sampled_peak_rss_bytes
+                .value()
+                .is_some()
         );
         assert!(
             result

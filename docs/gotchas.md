@@ -42,3 +42,6 @@
 - Sampler startup must not hide child completion. Use non-reaping exit checks
   while the process identity is being captured, and stop sampling before cleanup
   can release the root PID.
+- Sampling backoff can outlast a short operation deadline. Timeout tests should
+  verify that earlier evidence survives; full descendant coverage needs a longer
+  fixture and belongs in the separate process-tree test.
