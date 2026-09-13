@@ -1,6 +1,7 @@
 //! Engine-independent benchmark orchestration primitives.
 
 mod digest;
+mod environment;
 mod execution;
 mod init;
 mod manifest;
@@ -14,6 +15,7 @@ mod runner;
 mod sample;
 mod types;
 
+pub use environment::{EnvironmentCapture, HarnessBuild};
 pub use execution::{ExecutionResult, execute_plan};
 pub use init::initialize;
 pub use manifest::{

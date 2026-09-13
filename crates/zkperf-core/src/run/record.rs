@@ -51,6 +51,10 @@ pub struct RunRecord {
     manifest_path: PathBuf,
     manifest_digest: Sha256Digest,
     files: Vec<FileProvenance>,
+    #[serde(default = "not_recorded")]
+    environment: crate::Observed<crate::EnvironmentCapture>,
+    #[serde(default = "not_recorded")]
+    environment_digest: crate::Observed<Sha256Digest>,
     artifacts: Count,
 }
 
@@ -66,6 +70,8 @@ impl RunRecord {
             manifest_path: parts.manifest_path,
             manifest_digest: parts.manifest_digest,
             files: parts.files,
+            environment_digest: parts.environment.digest().into(),
+            environment: parts.environment.into(),
             artifacts: Count::new(0),
         }
     }
@@ -136,6 +142,23 @@ impl RunRecord {
     pub const fn artifacts(&self) -> Count {
         self.artifacts
     }
+
+    #[must_use]
+    pub const fn environment(&self) -> &crate::Observed<crate::EnvironmentCapture> {
+        &self.environment
+    }
+
+    #[must_use]
+    pub const fn environment_digest(&self) -> &crate::Observed<Sha256Digest> {
+        &self.environment_digest
+    }
+}
+
+fn not_recorded<T>() -> crate::Observed<T> {
+    crate::Observed::gap(
+        "not_recorded",
+        "This run record predates environment capture.",
+    )
 }
 
 pub(super) struct RunRecordParts {
@@ -145,6 +168,7 @@ pub(super) struct RunRecordParts {
     pub manifest_path: PathBuf,
     pub manifest_digest: Sha256Digest,
     pub files: Vec<FileProvenance>,
+    pub environment: crate::EnvironmentCapture,
 }
 
 /// Supported run record versions.

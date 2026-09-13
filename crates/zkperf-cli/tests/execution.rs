@@ -32,6 +32,7 @@ fn run_executes_the_selected_command_and_preserves_failure_evidence() {
     let record: serde_json::Value =
         serde_json::from_slice(&fs::read(directory.join("run.json")).unwrap()).unwrap();
     assert_eq!(record["state"], "failed");
+    assert!(record["environment"]["harness"]["version"].is_string());
     let logs = fs::read_dir(directory.join("logs"))
         .unwrap()
         .map(|entry| entry.unwrap().path())
@@ -205,6 +206,12 @@ fn ctrl_c_cancels_the_cli_and_terminates_adapter_descendants() {
         serde_json::from_slice(&fs::read(run_directory(&fixture).join("run.json")).unwrap())
             .unwrap();
     assert_eq!(record["state"], "failed");
+    assert!(record["environment"]["host"].is_object());
+    let retained = zkperf_core::RunRecord::load(run_directory(&fixture)).unwrap();
+    assert_eq!(
+        retained.environment_digest().value(),
+        Some(&retained.environment().value().unwrap().digest())
+    );
     std::thread::sleep(Duration::from_millis(2100));
     assert!(!survivor.exists());
 }

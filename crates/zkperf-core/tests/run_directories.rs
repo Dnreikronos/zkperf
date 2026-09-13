@@ -139,6 +139,10 @@ fn interrupted_runs_remain_diagnosable() {
 
     let record = RunRecord::load(&path).unwrap();
     assert_eq!(record.state(), RunState::InProgress);
+    assert_eq!(
+        record.environment_digest().value(),
+        Some(&record.environment().value().unwrap().digest())
+    );
     assert!(record.finished_at().is_none());
     assert_eq!(record.plan_id(), plan.id());
     assert!(path.join("plan.json").is_file());
@@ -609,6 +613,10 @@ fn finished_runs_publish_their_outcome_and_provenance() {
     let record = run.finish(RunOutcome::Completed).unwrap();
 
     assert_eq!(record.state(), RunState::Completed);
+    assert_eq!(
+        record.environment_digest().value(),
+        Some(&record.environment().value().unwrap().digest())
+    );
     assert!(
         record
             .started_at()
@@ -668,4 +676,23 @@ fn persisted_evidence_keeps_configured_secrets_redacted() {
     assert!(snapshot.contains("[redacted]"));
     assert!(!snapshot.contains("private-setting"));
     assert!(snapshot.contains(plan.id()));
+}
+
+#[test]
+fn older_records_load_with_explicit_gaps_without_probing_the_readers_host() {
+    let fixture = Fixture::new(SOURCE);
+    let run = RunDirectory::create(&fixture.plan()).unwrap();
+    let path = run.path().to_path_buf();
+    run.finish(RunOutcome::Completed).unwrap();
+    let mut record: serde_json::Value =
+        serde_json::from_slice(&fs::read(path.join("run.json")).unwrap()).unwrap();
+    record.as_object_mut().unwrap().remove("environment");
+    record.as_object_mut().unwrap().remove("environment_digest");
+    fs::write(path.join("run.json"), serde_json::to_vec(&record).unwrap()).unwrap();
+    let loaded = RunRecord::load(&path).unwrap();
+    assert!(loaded.environment().value().is_none());
+    assert!(loaded.environment_digest().value().is_none());
+    let value = serde_json::to_value(loaded).unwrap();
+    assert_eq!(value["environment"]["reason"]["code"], "not_recorded");
+    assert_eq!(value["environment_digest"]["availability"], "unavailable");
 }

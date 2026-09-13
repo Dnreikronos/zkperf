@@ -109,6 +109,9 @@ impl RunDirectory {
                 manifest_path: manifest_path.to_path_buf(),
                 manifest_digest,
                 files: plan.files().to_vec(),
+                environment: crate::EnvironmentCapture::collect(
+                    plan.manifest().run().resources().environment_variables(),
+                ),
             }),
             path,
             directory: root,
