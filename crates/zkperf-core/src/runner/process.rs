@@ -117,7 +117,8 @@ pub(super) fn execute(
             stdout: Vec::new(),
         };
     }
-    let input = format!("{request}\n").into_bytes();
+    let mut input = serde_json::to_vec(request).expect("JSON value serialization");
+    input.push(b'\n');
     let limit = Duration::from_nanos(request["timeout"]["limit_ns"].as_u64().unwrap());
     let grace = if invocation.graceful_cancellation {
         Duration::from_nanos(request["timeout"]["termination_grace_ns"].as_u64().unwrap())
