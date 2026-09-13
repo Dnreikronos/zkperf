@@ -10,6 +10,7 @@ mod metadata;
 mod observed;
 mod plan;
 mod report;
+mod resources;
 mod run;
 mod runner;
 mod sample;
@@ -48,6 +49,9 @@ pub use report::{
     Artifact, ArtifactKind, ArtifactParts, BenchmarkJob, BenchmarkReport, BenchmarkReportV1,
     BenchmarkReportV1Parts, BenchmarkReportV2, BenchmarkReportV2Parts, CompatibilityMetadata,
     ReportError, ReportStatus, RunMetadata, RunMetadataParts, Warning,
+};
+pub use resources::{
+    CollectionDiagnostics, ResourceCapabilities, ResourceCapability, ResourceEvidence,
 };
 pub use run::{
     ArtifactRequest, RunDirectory, RunError, RunOutcome, RunRecord, RunState, RunWorkspace,

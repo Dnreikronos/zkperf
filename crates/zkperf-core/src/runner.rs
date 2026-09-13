@@ -16,7 +16,7 @@ use std::sync::{
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::{Artifact, RunDirectory, RunError, RunWorkspace};
+use crate::{Artifact, ResourceEvidence, RunDirectory, RunError, RunWorkspace};
 
 /// Cooperative harness cancellation, shared with a UI or signal handler.
 #[derive(Clone, Debug, Default)]
@@ -95,6 +95,7 @@ pub struct OperationRecord {
     pub signal: Option<i32>,
     pub phase_duration_ns: u64,
     pub cleanup_duration_ns: u64,
+    pub resources: ResourceEvidence,
     pub stdout_truncated: bool,
     pub stderr_truncated: bool,
     pub errors: Vec<String>,

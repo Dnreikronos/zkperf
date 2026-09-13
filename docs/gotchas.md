@@ -23,4 +23,25 @@
   needs a new report version, even when all older examples still validate.
 - Start subprocess deadline assertions after fixture setup. Run creation collects
   host metadata and hashes the executable; including that work makes supervisor
-  tests depend on CI machine speed and debug-binary size.
+  tests depend on CI machine speed and debug-binary size. For subprocess tests
+  that check for blocking I/O, signal readiness after setup and give setup its
+  own timeout so a slow fixture is not reported as a blocked read.
+- Linux process I/O includes waited-for children. Summing `/proc/PID/io` with
+  retained descendant counters double-counts work after reap. Sample per-thread
+  I/O and test a writing grandchild whose parent and grandparent both wait.
+- Thread identity checks do not connect a proc read to an earlier process
+  snapshot. Validate the opened process's start time against the snapshot and
+  open tasks through that same directory handle before retaining I/O counters.
+- Counter units are not precision guarantees. Preserve sampled peak semantics,
+  partial tree coverage, identity resolution and unavailable-read reasons with
+  the values, including failed operations.
+- A failed worker's missing diagnostics are not measured zeros. Keep unavailable
+  counts separate from a collector that is known not to have started.
+- A timestamp sent through a channel can precede its delivery. Publish stop
+  boundaries synchronously before waking workers and test delayed notifications.
+- Sampler startup must not hide child completion. Use non-reaping exit checks
+  while the process identity is being captured, and stop sampling before cleanup
+  can release the root PID.
+- Sampling backoff can outlast a short operation deadline. Timeout tests should
+  verify that earlier evidence survives; full descendant coverage needs a longer
+  fixture and belongs in the separate process-tree test.

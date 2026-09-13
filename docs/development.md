@@ -64,13 +64,21 @@ The runner's integration tests require Python 3.10+ (`python3` on Unix, `python`
 on Windows) for subprocess fixtures. Run the focused execution checks with
 `cargo test -p zkperf-core --test subprocess_runner -p zkperf-cli --test execution`.
 
-Environment capture uses `sysinfo` 0.33 with only its `system` feature, compatible
+Environment capture uses `sysinfo` 0.36.1 with only its `system` feature, compatible
 with the workspace MSRV. It refreshes static CPU and RAM metadata without process
 or user enumeration. Platform gaps and safe settings are documented in the
 [environment capture contract](environment-fingerprint-v1.md). The dependency
 allowlist in `tools/check.py` includes this host-only dependency and the direct
 Unix `rustix` dependency used for OS-reported architecture without a build-target
 fallback. `rustix` was already present transitively through run storage.
+
+Operation resource capture uses the same dependency's cumulative CPU counters,
+RSS and platform I/O APIs in a separate worker. Linux I/O uses per-thread proc
+counters to avoid double-counting waited-for descendants. See the
+[resource evidence contract](process-resources-v1.md) for sampling limits,
+platform semantics and the collector budget. Focused tests are
+`cargo test -p zkperf-core --lib resources` and
+`cargo test -p zkperf-core --test subprocess_runner resources`.
 
 The [deterministic mock adapter](mock-adapter-v1.md) in `adapters/mock/` is a
 standalone Python standard-library implementation of all protocol operations.

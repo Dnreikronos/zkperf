@@ -387,7 +387,8 @@ fn adopting_fifo_without_writer_is_rejected() {
 
     const CHILD_MANIFEST: &str = "ZKPERF_TEST_FIFO_MANIFEST";
     if let Some(manifest) = std::env::var_os(CHILD_MANIFEST) {
-        let plan = BenchmarkPlan::build(BenchmarkManifest::load(manifest).unwrap()).unwrap();
+        let manifest = PathBuf::from(manifest);
+        let plan = BenchmarkPlan::build(BenchmarkManifest::load(&manifest).unwrap()).unwrap();
         let mut run = RunDirectory::create(&plan).unwrap();
         let fifo = run.path().join("proof.bin");
         assert!(
@@ -397,6 +398,7 @@ fn adopting_fifo_without_writer_is_rejected() {
                 .unwrap()
                 .success()
         );
+        fs::write(manifest.with_extension("ready"), b"").unwrap();
         assert!(matches!(
             run.adopt(&request("proof.bin", ArtifactKind::Proof)),
             Err(RunError::NotARegularFile(path)) if path == fifo
@@ -420,15 +422,22 @@ fn adopting_fifo_without_writer_is_rejected() {
         .env(CHILD_MANIFEST, fixture.0.join("zkperf.toml"))
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    // Run creation hashes the executable and collects host metadata first.
+    let mut deadline = Instant::now() + Duration::from_secs(60);
+    let mut adoption_started = false;
     loop {
         if let Some(status) = child.try_wait().unwrap() {
             assert!(status.success(), "FIFO adoption child failed: {status}");
             break;
         }
+        if !adoption_started && fixture.0.join("zkperf.ready").exists() {
+            adoption_started = true;
+            deadline = Instant::now() + Duration::from_secs(5);
+        }
         if Instant::now() >= deadline {
             child.kill().unwrap();
             child.wait().unwrap();
+            assert!(adoption_started, "FIFO adoption fixture setup timed out");
             panic!("adoption blocked waiting for a FIFO writer");
         }
         std::thread::sleep(Duration::from_millis(10));
