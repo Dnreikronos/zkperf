@@ -175,6 +175,42 @@ fn all_zero_counters_are_not_claimed_as_measured_zero() {
     assert!(result.sampled_peak_rss_bytes.value().is_none());
     assert!(result.io_read_bytes.value().is_none());
     assert!(result.io_written_bytes.value().is_none());
+    assert_eq!(result.collection.value().unwrap().samples, 1);
+    let result = serde_json::to_value(result).unwrap();
+    for (field, metric) in [
+        ("cpu_time_ns", "CPU time"),
+        ("sampled_peak_rss_bytes", "resident memory"),
+        ("io_read_bytes", "read I/O"),
+        ("io_written_bytes", "write I/O"),
+    ] {
+        assert_eq!(result[field]["reason"]["code"], "no_positive_observation");
+        assert!(
+            result[field]["reason"]["message"]
+                .as_str()
+                .unwrap()
+                .contains(metric)
+        );
+    }
+}
+
+#[test]
+fn unobserved_processes_keep_the_no_sample_reason_for_every_metric() {
+    for sampled in [false, true] {
+        let mut aggregate = Aggregate::new(1, 10);
+        if sampled {
+            aggregate.sample(&[], INTERVAL);
+            aggregate.sample_linux_io();
+        }
+        let result = serde_json::to_value(aggregate.finish(INTERVAL)).unwrap();
+        for field in [
+            "cpu_time_ns",
+            "sampled_peak_rss_bytes",
+            "io_read_bytes",
+            "io_written_bytes",
+        ] {
+            assert_eq!(result[field]["reason"]["code"], "not_observed");
+        }
+    }
 }
 
 #[test]

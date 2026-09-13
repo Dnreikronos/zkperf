@@ -117,7 +117,9 @@ impl Aggregate {
             .value()
             .copied()
             .unwrap_or(0);
-        self.evidence.sampled_peak_rss_bytes = positive(old_peak.max(rss));
+        if !self.retained.is_empty() {
+            self.evidence.sampled_peak_rss_bytes = positive(old_peak.max(rss), "resident memory");
+        }
         let stats = self.evidence.collection_mut();
         let offset = nanos(offset);
         stats.max_sample_gap_ns = stats
@@ -167,14 +169,14 @@ impl Aggregate {
             total.written = sum(total.written, retained.counters.written, saturated);
         }
         if !self.retained.is_empty() {
-            self.evidence.cpu_time_ns = positive(total.cpu_ns);
-            self.evidence.io_read_bytes = positive(total.read);
-            self.evidence.io_written_bytes = positive(total.written);
-        }
-        if let Some(io) = &self.task_io {
-            let (read, written) = io.total(self.evidence.collection_mut());
-            self.evidence.io_read_bytes = positive(read);
-            self.evidence.io_written_bytes = positive(written);
+            self.evidence.cpu_time_ns = positive(total.cpu_ns, "CPU time");
+            self.evidence.io_read_bytes = positive(total.read, "read I/O");
+            self.evidence.io_written_bytes = positive(total.written, "write I/O");
+            if let Some(io) = &self.task_io {
+                let (read, written) = io.total(self.evidence.collection_mut());
+                self.evidence.io_read_bytes = positive(read, "read I/O");
+                self.evidence.io_written_bytes = positive(written, "write I/O");
+            }
         }
         let stats = self.evidence.collection_mut();
         stats.max_sample_gap_ns = stats

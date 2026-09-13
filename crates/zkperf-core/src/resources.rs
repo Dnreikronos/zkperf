@@ -205,11 +205,13 @@ fn nanos(duration: Duration) -> u64 {
     u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX)
 }
 
-fn positive(value: u64) -> Observed<u64> {
+fn positive(value: u64, metric: &str) -> Observed<u64> {
     if value == 0 {
         Observed::gap(
             "no_positive_observation",
-            "No positive counter was observed; zero and unavailable cannot be distinguished.",
+            &format!(
+                "No positive {metric} counter was observed; zero and unavailable cannot be distinguished."
+            ),
         )
     } else {
         value.into()
