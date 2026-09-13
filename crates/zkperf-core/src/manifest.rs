@@ -142,6 +142,9 @@ fn redact_secret_like_values(value: &mut Value) {
 
 pub(super) fn is_secret_like_key(key: &str) -> bool {
     let tokens = secret_key_tokens(key);
+    if matches!(tokens.concat().as_str(), "dockerauthconfig" | "sshauthsock") {
+        return true;
+    }
 
     if tokens.iter().any(|token| {
         matches!(

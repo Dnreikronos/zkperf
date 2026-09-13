@@ -133,6 +133,36 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn credential_aliases_are_redacted_in_nested_configuration() {
+        for key in [
+            "DOCKER_AUTH_CONFIG",
+            "docker_auth_config",
+            "dockerAuthConfig",
+            "DockerAuthConfig",
+            "docker-auth-config",
+            "docker.auth.config",
+            "dockerauthconfig",
+            "SSH_AUTH_SOCK",
+            "ssh_auth_sock",
+            "sshAuthSock",
+            "SshAuthSock",
+            "ssh-auth-sock",
+            "ssh.auth.sock",
+            "sshauthsock",
+        ] {
+            let value = safe_configuration(&json!({
+                "nested": [{key: {"value": "sensitive-value"}, "backend": "cpu"}],
+                "auth_mode": "agent",
+            }));
+            assert_eq!(value["nested"][0][key], "[redacted]", "{key}");
+            assert!(!value.to_string().contains("sensitive-value"), "{key}");
+            assert_eq!(value["nested"][0]["backend"], "cpu");
+            assert_eq!(value["auth_mode"], "agent");
+            assert!(crate::manifest::is_secret_like_key(key), "{key}");
+        }
+    }
+
+    #[test]
     fn malformed_guest_metadata_is_explicit_and_private_flags_are_excluded() {
         for value in [
             json!(null),
