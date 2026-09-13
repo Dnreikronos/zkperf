@@ -34,9 +34,16 @@ producer in issue #16; published BenchmarkReport schemas remain unchanged.
   CPU and I/O are incomplete lifetime observations; unsampled processes, final
   counter increments, transient memory peaks and already-reparented descendants
   can be missed. Unknown values use explicit reasons, never fabricated zeros.
+- Collection diagnostics are an observed value. A worker that cannot start or
+  panics reports `collection.availability = "unavailable"` with a
+  `collector_failed` reason; its lost counts and durations are not replaced by
+  zeros. Operations that never start a collector retain known zero diagnostics.
 - Identity uses PID plus the OS start time exposed by sysinfo (whole seconds).
-  The worker anchors the adapter identity before the watchdog may reap it;
-  cancellation and deadlines continue to be checked during that initial read.
+  On Linux and macOS, the watchdog uses a non-reaping exit check while the worker
+  anchors the adapter identity. A completed child can finish without waiting for
+  that read; sampling is stopped before cleanup reaps the root. Windows keeps
+  the child process handle open through the same boundary. Cancellation and
+  deadlines continue to be checked during startup.
   A disappeared identity is retired and cannot be resurrected; a changed start
   time never inherits counters or membership. A parent must be present with its
   tracked identity to discover new children. Reparented children already observed
@@ -44,7 +51,9 @@ producer in issue #16; published BenchmarkReport schemas remain unchanged.
   be distinguished and is disclosed as an identity precision limitation.
 - Fresh snapshots avoid retaining stale successful reads after later failures.
   The backend can return zero for inaccessible counters; all-zero observations
-  are unavailable rather than evidence of no CPU, memory, or I/O usage.
+  are unavailable rather than evidence of no CPU, memory, or I/O usage. Their gap
+  messages name the affected metric. A root that was never observed keeps the
+  `not_observed` reason, even if a sweep found other processes.
 
 ## Collector budget
 
@@ -56,8 +65,11 @@ visits at most 4096 tasks. Limit hits and read failures are disclosed. It keeps 
 aggregate and one provisional sweep rather than an unbounded sample history.
 Platform process enumeration still scales with host
 process count and a single OS call cannot have a portable hard deadline; the
-worker never runs on the watchdog thread. Stopping wakes its wait immediately.
-In-flight sweeps that finish after the phase boundary are discarded. Collector
+worker never runs on the watchdog thread. Stopping publishes one timestamp under
+a lock before sending a wakeup; repeated stop calls return that same timestamp.
+Sweep acceptance reads the published boundary, so delayed wake delivery cannot
+admit later counters. Sweeps that finish at or after the stop or deadline are
+discarded, but their collection cost remains recorded. Collector
 startup and resource contention can perturb wall time and are not subtracted.
 
 `capabilities` describes counter support separately from observed values. Linux
@@ -84,6 +96,9 @@ Deterministic tests cover tree aggregation, reparenting, disappearing processes,
 counter regressions, PID reuse, unsupported providers, tracking caps and the
 sampling budget. Linux tests reject a stale start time for a live PID, preserve
 previous counters after rejection, and accept a matching sysinfo identity.
+Worker tests cover lost diagnostics after panic, delayed stop notifications and
+samples on both sides of a stop or deadline. Watchdog tests cover pending sampler
+startup, non-reaping exit detection, signals, cancellation and unfinished pipes.
 Subprocess fixtures exercise child CPU, memory and I/O, plus
 retained resource evidence on success, failure, timeout and cancellation. Local
 platform results are distinguished from the other platforms' CI coverage.

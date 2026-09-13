@@ -35,3 +35,10 @@
 - Counter units are not precision guarantees. Preserve sampled peak semantics,
   partial tree coverage, identity resolution and unavailable-read reasons with
   the values, including failed operations.
+- A failed worker's missing diagnostics are not measured zeros. Keep unavailable
+  counts separate from a collector that is known not to have started.
+- A timestamp sent through a channel can precede its delivery. Publish stop
+  boundaries synchronously before waking workers and test delayed notifications.
+- Sampler startup must not hide child completion. Use non-reaping exit checks
+  while the process identity is being captured, and stop sampling before cleanup
+  can release the root PID.
